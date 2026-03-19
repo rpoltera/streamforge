@@ -7,47 +7,43 @@ INSTALL_DIR="/opt/streamforge"
 SERVICE_NAME="streamforge"
 PORT="8000"
 
-GREEN='\033[1;32m'
-YELLOW='\033[1;33m'
-RED='\033[1;31m'
-BLUE='\033[1;34m'
-NC='\033[0m'
-
-msg() { echo -e "${BLUE}==>${NC} $1"; }
-ok()  { echo -e "${GREEN}✔${NC}  $1"; }
-warn(){ echo -e "${YELLOW}⚠${NC}  $1"; }
-err() { echo -e "${RED}✖${NC}  $1"; }
-
 echo "============================"
 echo "  ${APP} Full Installer"
 echo "============================"
 
 if [[ $EUID -ne 0 ]]; then
-  err "Run this script as root."
+  echo "Run as root"
   exit 1
 fi
 
-msg "[1/8] Updating system"
+echo "[1/9] Updating system"
 apt update -y
 DEBIAN_FRONTEND=noninteractive apt upgrade -y
-ok "System updated"
 
-msg "[2/8] Installing dependencies"
-DEBIAN_FRONTEND=noninteractive apt install -y \
-  curl git ffmpeg python3 python3-venv python3-pip nodejs npm ca-certificates
-ok "Dependencies installed"
+echo "[2/9] Installing base dependencies"
+apt install -y curl git ffmpeg python3 python3-venv python3-pip ca-certificates
 
-msg "[3/8] Cloning repo"
+echo "[3/9] Installing Node.js 20 (REQUIRED)"
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+apt install -y nodejs
+
+echo "[4/9] Verifying Node"
+node -v
+npm -v
+
+echo "[5/9] Cloning repo"
 rm -rf "${INSTALL_DIR}"
 git clone "${REPO_URL}" "${INSTALL_DIR}"
-ok "Repo cloned to ${INSTALL_DIR}"
 
-msg "[4/8] Ensuring backend exists"
+# -------------------------
+# BACKEND
+# -------------------------
+echo "[6/9] Backend setup"
+
 mkdir -p "${INSTALL_DIR}/backend"
 
 if [[ ! -f "${INSTALL_DIR}/backend/main.py" ]]; then
-  warn "No backend/main.py found, creating minimal backend"
-  cat > "${INSTALL_DIR}/backend/main.py" <<'PYEOF'
+cat > "${INSTALL_DIR}/backend/main.py" <<'EOF'
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -60,14 +56,7 @@ FRONTEND_DIST = BASE_DIR.parent / "frontend" / "dist"
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "app": "StreamForge"}
-
-@app.get("/api/info")
-def info():
-    return {
-        "message": "StreamForge backend is running",
-        "frontend_dist_exists": FRONTEND_DIST.exists()
-    }
+    return {"status": "ok"}
 
 if FRONTEND_DIST.exists():
     app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="assets")
@@ -77,53 +66,38 @@ if FRONTEND_DIST.exists():
         index_file = FRONTEND_DIST / "index.html"
         if index_file.exists():
             return FileResponse(index_file)
-        return JSONResponse({"error": "Frontend not built"}, status_code=500)
+        return JSONResponse({"error": "frontend missing"}, status_code=500)
 else:
     @app.get("/{full_path:path}")
     def no_frontend(full_path: str):
-        return JSONResponse(
-            {"error": "Frontend not built", "hint": "Check frontend build logs"},
-            status_code=500
-        )
-PYEOF
-  ok "Minimal backend created"
-else
-  ok "Backend found"
+        return {"error": "frontend not built"}
+EOF
 fi
 
-msg "[5/8] Setting up Python backend"
 cd "${INSTALL_DIR}/backend"
 python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
-if [[ -f requirements.txt ]]; then
-  pip install -r requirements.txt
-else
-  pip install fastapi uvicorn python-multipart
-fi
+pip install fastapi uvicorn python-multipart
 deactivate
-ok "Backend environment ready"
 
-msg "[6/8] Ensuring frontend exists"
-if [[ ! -d "${INSTALL_DIR}/frontend" ]]; then
-  warn "No frontend directory found, creating Vite React frontend"
-  cd "${INSTALL_DIR}"
-  npm create vite@latest frontend -- --template react
+# -------------------------
+# FRONTEND
+# -------------------------
+echo "[7/9] Frontend setup"
+
+cd "${INSTALL_DIR}"
+
+if [[ ! -d "frontend" ]]; then
+  npx create-vite@latest frontend --template react --yes
 fi
 
-cd "${INSTALL_DIR}/frontend"
+cd frontend
 
-if [[ ! -f package.json ]]; then
-  err "frontend/package.json is missing"
-  exit 1
-fi
-
-# Make sure React app has an entry point if repo is incomplete
 mkdir -p src
 
 if [[ ! -f src/main.jsx ]]; then
-  warn "No src/main.jsx found, creating it"
-  cat > src/main.jsx <<'JSEOF'
+cat > src/main.jsx <<'EOF'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
@@ -134,53 +108,38 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <App />
   </React.StrictMode>,
 )
-JSEOF
+EOF
 fi
 
 if [[ ! -f src/App.jsx ]]; then
-  warn "No src/App.jsx found, creating minimal app"
-  cat > src/App.jsx <<'JSEOF'
+cat > src/App.jsx <<'EOF'
 export default function App() {
   return (
-    <div style={{
-      background: '#0f1117',
-      color: '#e2e8f0',
-      minHeight: '100vh',
-      fontFamily: 'system-ui, sans-serif',
-      padding: '32px'
-    }}>
+    <div style={{background:'#0f1117',color:'#fff',minHeight:'100vh',padding:'20px'}}>
       <h1>StreamForge</h1>
-      <p>Frontend is running.</p>
-      <p>Backend health: <a href="/api/health" style={{color:'#60a5fa'}}>/api/health</a></p>
+      <p>Running</p>
+      <a href="/api/health">Health Check</a>
     </div>
   )
 }
-JSEOF
+EOF
 fi
 
 if [[ ! -f src/index.css ]]; then
-  warn "No src/index.css found, creating minimal CSS"
-  cat > src/index.css <<'CSSEOF'
-html, body, #root {
-  margin: 0;
-  padding: 0;
-  min-height: 100%;
-}
-body {
-  background: #0f1117;
-}
-CSSEOF
+echo "body { margin:0; background:#0f1117; }" > src/index.css
 fi
 
-msg "[7/8] Installing and building frontend"
 npm install
 npm run build
-ok "Frontend built"
 
-msg "[8/8] Creating systemd service"
-cat > "/etc/systemd/system/${SERVICE_NAME}.service" <<EOF
+# -------------------------
+# SERVICE
+# -------------------------
+echo "[8/9] Creating service"
+
+cat > /etc/systemd/system/${SERVICE_NAME}.service <<EOF
 [Unit]
-Description=${APP}
+Description=StreamForge
 After=network.target
 
 [Service]
@@ -188,25 +147,17 @@ Type=simple
 WorkingDirectory=${INSTALL_DIR}/backend
 ExecStart=${INSTALL_DIR}/backend/.venv/bin/uvicorn main:app --host 0.0.0.0 --port ${PORT}
 Restart=always
-RestartSec=3
-Environment=PYTHONUNBUFFERED=1
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable "${SERVICE_NAME}"
-systemctl restart "${SERVICE_NAME}"
-ok "Service started"
+systemctl enable ${SERVICE_NAME}
+systemctl restart ${SERVICE_NAME}
 
-IP_ADDR="$(hostname -I | awk '{print $1}')"
+IP=$(hostname -I | awk '{print $1}')
 
-echo
-echo "============================"
-echo "  ${APP} Installed"
-echo "============================"
-echo "URL: http://${IP_ADDR}:${PORT}"
-echo "Health: http://${IP_ADDR}:${PORT}/api/health"
-echo
-systemctl --no-pager --full status "${SERVICE_NAME}" || true
+echo "[9/9] DONE"
+echo "Access: http://${IP}:${PORT}"
+echo "Health: http://${IP}:${PORT}/api/health"
