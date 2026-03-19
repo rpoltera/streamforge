@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
 
-# Author: Raymond / ChatGPT
+# Author: Raymond
 # License: MIT
-# App: StreamForge (Custom IPTV Scheduler)
+# App: StreamForge
 
 APP="StreamForge"
 var_tags="${var_tags:-iptv;media}"
@@ -19,51 +19,49 @@ variables
 color
 catch_errors
 
-function install_streamforge() {
+start
+build_container
+description
 
-  msg_info "Updating system"
-  apt update -y && apt upgrade -y
-  msg_ok "Updated system"
+msg_info "Installing ${APP}"
 
-  msg_info "Installing dependencies"
-  apt install -y curl git ffmpeg python3 python3-venv python3-pip nodejs npm
-  msg_ok "Installed dependencies"
+lxc-attach -n $CTID -- bash <<'EOF'
+set -e
 
-  msg_info "Cloning StreamForge repo"
-  git clone https://github.com/rpoltera/streamforge.git /opt/streamforge
-  msg_ok "Cloned repo"
+echo "============================"
+echo "StreamForge Installation"
+echo "============================"
 
-  # =========================
-  # Backend setup
-  # =========================
-  msg_info "Setting up backend"
-  cd /opt/streamforge/backend
+echo "[1/7] Updating system..."
+apt update -y && apt upgrade -y
 
-  python3 -m venv .venv
-  source .venv/bin/activate
+echo "[2/7] Installing dependencies..."
+apt install -y curl git ffmpeg python3 python3-venv python3-pip nodejs npm
 
-  pip install --upgrade pip
-  pip install fastapi uvicorn python-multipart
+echo "[3/7] Cloning StreamForge repo..."
+rm -rf /opt/streamforge
+git clone https://github.com/rpoltera/streamforge.git /opt/streamforge
 
-  deactivate
-  msg_ok "Backend ready"
+echo "[4/7] Setting up backend..."
+cd /opt/streamforge/backend
 
-  # =========================
-  # Frontend setup
-  # =========================
-  msg_info "Setting up frontend"
-  cd /opt/streamforge/frontend
+python3 -m venv .venv
+source .venv/bin/activate
 
-  npm install
-  npm run build
-  msg_ok "Frontend built"
+pip install --upgrade pip
+pip install fastapi uvicorn python-multipart
 
-  # =========================
-  # Create systemd service
-  # =========================
-  msg_info "Creating service"
+deactivate
 
-cat <<EOF >/etc/systemd/system/streamforge.service
+echo "[5/7] Setting up frontend..."
+cd /opt/streamforge/frontend
+
+npm install
+npm run build
+
+echo "[6/7] Creating systemd service..."
+
+cat <<SERVICE >/etc/systemd/system/streamforge.service
 [Unit]
 Description=StreamForge IPTV Scheduler
 After=network.target
@@ -76,27 +74,19 @@ Restart=always
 
 [Install]
 WantedBy=multi-user.target
+SERVICE
+
+systemctl daemon-reload
+systemctl enable streamforge
+systemctl restart streamforge
+
+echo "[7/7] Cleaning up..."
+apt autoremove -y
+
+echo "============================"
+echo "StreamForge Installed"
+echo "============================"
 EOF
-
-  systemctl daemon-reexec
-  systemctl daemon-reload
-  systemctl enable streamforge
-  systemctl start streamforge
-
-  msg_ok "Service created and started"
-
-  # =========================
-  # Done
-  # =========================
-  msg_ok "StreamForge Installed Successfully"
-}
-
-start
-build_container
-description
-
-msg_info "Installing ${APP}"
-lxc-attach -n $CTID -- bash -c "$(declare -f install_streamforge); install_streamforge"
 
 msg_ok "Completed successfully!"
 echo -e "${INFO} Access your app:"
