@@ -1,14 +1,10 @@
 #!/usr/bin/env bash
 source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
 
-# Author: Raymond
-# License: MIT
-# App: StreamForge
-
 APP="StreamForge"
-var_tags="${var_tags:-iptv;media}"
-var_cpu="${var_cpu:-4}"
-var_ram="${var_ram:-4096}"
+var_tags="${var_tags:-iptv}"
+var_cpu="${var_cpu:-2}"
+var_ram="${var_ram:-2048}"
 var_disk="${var_disk:-10}"
 var_os="${var_os:-debian}"
 var_version="${var_version:-12}"
@@ -19,49 +15,62 @@ variables
 color
 catch_errors
 
-start
-build_container
-description
+function install_streamforge() {
 
-msg_info "Installing ${APP}"
+  msg_info "Updating system"
+  apt update -y && apt upgrade -y
+  msg_ok "Updated system"
 
-lxc-attach -n $CTID -- bash <<'EOF'
-set -e
+  msg_info "Installing dependencies"
+  apt install -y curl git ffmpeg python3 python3-venv python3-pip nodejs npm
+  msg_ok "Installed dependencies"
 
-echo "============================"
-echo "StreamForge Installation"
-echo "============================"
+  msg_info "Cloning repo"
+  rm -rf /opt/streamforge
+  git clone https://github.com/rpoltera/streamforge.git /opt/streamforge
+  msg_ok "Cloned repo"
 
-echo "[1/7] Updating system..."
-apt update -y && apt upgrade -y
+  # -----------------------------
+  # BACKEND (safe check)
+  # -----------------------------
+  if [ -d "/opt/streamforge/backend" ]; then
+    msg_info "Setting up backend"
+    cd /opt/streamforge/backend
 
-echo "[2/7] Installing dependencies..."
-apt install -y curl git ffmpeg python3 python3-venv python3-pip nodejs npm
+    python3 -m venv .venv
+    source .venv/bin/activate
 
-echo "[3/7] Cloning StreamForge repo..."
-rm -rf /opt/streamforge
-git clone https://github.com/rpoltera/streamforge.git /opt/streamforge
+    pip install --upgrade pip
+    pip install fastapi uvicorn python-multipart
 
-echo "[4/7] Setting up backend..."
-cd /opt/streamforge/backend
+    deactivate
+    msg_ok "Backend ready"
+  else
+    msg_warn "No backend folder found - skipping backend setup"
+  fi
 
-python3 -m venv .venv
-source .venv/bin/activate
+  # -----------------------------
+  # FRONTEND (safe check)
+  # -----------------------------
+  if [ -d "/opt/streamforge/frontend" ]; then
+    msg_info "Setting up frontend"
+    cd /opt/streamforge/frontend
 
-pip install --upgrade pip
-pip install fastapi uvicorn python-multipart
+    npm install
+    npm run build
 
-deactivate
+    msg_ok "Frontend built"
+  else
+    msg_warn "No frontend folder found - skipping frontend build"
+  fi
 
-echo "[5/7] Setting up frontend..."
-cd /opt/streamforge/frontend
+  # -----------------------------
+  # SERVICE (only if backend exists)
+  # -----------------------------
+  if [ -d "/opt/streamforge/backend" ]; then
+    msg_info "Creating service"
 
-npm install
-npm run build
-
-echo "[6/7] Creating systemd service..."
-
-cat <<SERVICE >/etc/systemd/system/streamforge.service
+cat <<EOF >/etc/systemd/system/streamforge.service
 [Unit]
 Description=StreamForge IPTV Scheduler
 After=network.target
@@ -74,20 +83,21 @@ Restart=always
 
 [Install]
 WantedBy=multi-user.target
-SERVICE
-
-systemctl daemon-reload
-systemctl enable streamforge
-systemctl restart streamforge
-
-echo "[7/7] Cleaning up..."
-apt autoremove -y
-
-echo "============================"
-echo "StreamForge Installed"
-echo "============================"
 EOF
 
+    systemctl daemon-reload
+    systemctl enable streamforge
+    systemctl restart streamforge
+
+    msg_ok "Service started"
+  fi
+
+  msg_ok "Installation complete"
+}
+
+start
+build_container
+description
+
 msg_ok "Completed successfully!"
-echo -e "${INFO} Access your app:"
-echo -e "${TAB}http://${IP}:8000"
+echo -e "${INFO}Access it at: http://${IP}:8000"
