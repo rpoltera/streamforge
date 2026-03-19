@@ -11,46 +11,60 @@ DISK=10
 
 echo "=== ${APP} Debian 12 LXC Deploy ==="
 
-# Validate environment
 command -v pct >/dev/null || { echo "Run on Proxmox host"; exit 1; }
 
-# Get CTID
 CTID=$(pvesh get /cluster/nextid)
 
-# Detect bridge
 BRIDGE=$(ip -o link show | awk -F': ' '{print $2}' | grep '^vmbr' | head -n1)
 [ -z "$BRIDGE" ] && { echo "No vmbr bridge found"; exit 1; }
 
-# STRICT storage detection (no guessing)
-TEMPLATE_STORAGE=$(pvesm status -content vztmpl | awk 'NR>1 && $3=="active" {print $1; exit}')
-ROOTFS_STORAGE=$(pvesm status -content rootdir | awk 'NR>1 && $3=="active" {print $1; exit}')
+# -------- HARD FILTER STORAGE (NO BACKUPS EVER) --------
 
-[ -z "$TEMPLATE_STORAGE" ] && { echo "No template storage (vztmpl) found"; exit 1; }
-[ -z "$ROOTFS_STORAGE" ] && { echo "No rootfs storage found"; exit 1; }
+VALID_STORES=$(pvesm status | awk 'NR>1 && $3=="active" {print $1}' | grep -v '^backups$')
+
+# Find template storage that ACTUALLY WORKS
+for S in $VALID_STORES; do
+  if pveam available "$S" >/dev/null 2>&1; then
+    TEMPLATE_STORAGE="$S"
+    break
+  fi
+done
+
+[ -z "${TEMPLATE_STORAGE:-}" ] && { echo "No valid template storage found"; exit 1; }
+
+# Find rootfs storage (prefer lvm/zfs, avoid dir backups)
+for S in $VALID_STORES; do
+  if pvesm status -storage "$S" | grep -qE 'lvm|zfspool|lvmthin|dir'; then
+    ROOTFS_STORAGE="$S"
+    break
+  fi
+done
+
+[ -z "${ROOTFS_STORAGE:-}" ] && { echo "No valid rootfs storage found"; exit 1; }
 
 echo "CTID: $CTID"
 echo "Bridge: $BRIDGE"
 echo "Template storage: $TEMPLATE_STORAGE"
 echo "Rootfs storage: $ROOTFS_STORAGE"
 
-# Update templates
 echo "Updating templates..."
 pveam update
 
-# Get latest Debian 12 template
-TEMPLATE=$(pveam available $TEMPLATE_STORAGE | awk '/debian-12-standard/ {print $2}' | tail -n1)
+echo "Finding Debian 12 template..."
 
-[ -z "$TEMPLATE" ] && { echo "Failed to find Debian 12 template"; exit 1; }
+TEMPLATE=$(pveam available "$TEMPLATE_STORAGE" | awk '/debian-12-standard/ {print $2}' | tail -n1)
+
+[ -z "$TEMPLATE" ] && { echo "FAILED: No template found"; exit 1; }
 
 echo "Template: $TEMPLATE"
 
-# Download if missing
-if ! pveam list $TEMPLATE_STORAGE | grep -q "$TEMPLATE"; then
+if ! pveam list "$TEMPLATE_STORAGE" | grep -q "$TEMPLATE"; then
   echo "Downloading template..."
-  pveam download $TEMPLATE_STORAGE $TEMPLATE
+  pveam download "$TEMPLATE_STORAGE" "$TEMPLATE"
 fi
 
 echo "Creating LXC..."
+
 pct create $CTID ${TEMPLATE_STORAGE}:vztmpl/${TEMPLATE} \
   --hostname $HOSTNAME \
   --cores $CORES \
@@ -61,7 +75,6 @@ pct create $CTID ${TEMPLATE_STORAGE}:vztmpl/${TEMPLATE} \
   --features nesting=1 \
   --unprivileged 0
 
-echo "Starting LXC..."
 pct start $CTID
 sleep 5
 
@@ -73,7 +86,6 @@ apt update -y
 apt install -y python3 python3-venv python3-pip
 
 mkdir -p /opt/streamforge/backend
-mkdir -p /opt/streamforge/frontend/dist
 
 cat > /opt/streamforge/backend/main.py << 'EOF'
 from fastapi import FastAPI
@@ -114,4 +126,3 @@ echo ""
 echo "=========================="
 echo "LXC CREATED: $CTID"
 echo "URL: http://$IP:8000"
-echo "=========================="
