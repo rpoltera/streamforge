@@ -1,5 +1,18 @@
 #!/usr/bin/env bash
+# Guard against community-scripts helper regressions with set -u / nounset.
+# Some helper paths reference these before base defaults are assigned.
 : "${MAC:=}"
+: "${GATE:=}"
+: "${GATEWAY:=}"
+: "${APT_CACHER:=}"
+: "${APT_CACHER_IP:=}"
+: "${DISABLEIP6:=no}"
+: "${MTU:=}"
+: "${SD:=}"
+: "${NS:=}"
+: "${VLAN:=}"
+: "${SSH:=no}"
+: "${SSH_AUTHORIZED_KEY:=}"
 source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: rpoltera
