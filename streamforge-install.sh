@@ -52,7 +52,7 @@ BANNER
 prompt_settings() {
   echo -e "${YW}Default settings:${CL}"
   echo -e "  CT ID: ${BL}${NEXTID}${CL}  Host: ${BL}${NSAPP}${CL}  CPU: ${BL}${CT_CPU}${CL}  RAM: ${BL}${CT_RAM}MB${CL}  Disk: ${BL}${CT_DISK}GB${CL}  OS: ${BL}Debian 12${CL}\n"
-  read -r -p "Use default settings? [Y/n]: " yn
+  read -r -p "Use default settings? [Y/n]: " yn </dev/tty
   case "${yn,,}" in
     n|no) advanced_settings ;;
     *) CT_ID=$NEXTID; CT_HN=$NSAPP; CT_BRG="vmbr0"; CT_NET="dhcp"; CT_GATE=""; CT_VLAN="" ;;
@@ -61,22 +61,22 @@ prompt_settings() {
 
 advanced_settings() {
   echo -e "\n${BL}Advanced Settings${CL}\n"
-  read -r -p "  CT ID       [${NEXTID}]: " i; CT_ID=${i:-$NEXTID}
-  read -r -p "  Hostname    [${NSAPP}]: "  i; CT_HN=${i:-$NSAPP}
-  read -r -p "  CPU cores   [${CT_CPU}]: " i; CT_CPU=${i:-$CT_CPU}
-  read -r -p "  RAM MB      [${CT_RAM}]: " i; CT_RAM=${i:-$CT_RAM}
-  read -r -p "  Disk GB     [${CT_DISK}]: " i; CT_DISK=${i:-$CT_DISK}
-  read -r -p "  Bridge      [vmbr0]: "       i; CT_BRG=${i:-vmbr0}
-  read -r -p "  IP (blank=DHCP): "           i; CT_NET=${i:-dhcp}
+  read -r -p "  CT ID       [${NEXTID}]: " i; CT_ID=${i:-$NEXTID} </dev/tty
+  read -r -p "  Hostname    [${NSAPP}]: "  i; CT_HN=${i:-$NSAPP} </dev/tty
+  read -r -p "  CPU cores   [${CT_CPU}]: " i; CT_CPU=${i:-$CT_CPU} </dev/tty
+  read -r -p "  RAM MB      [${CT_RAM}]: " i; CT_RAM=${i:-$CT_RAM} </dev/tty
+  read -r -p "  Disk GB     [${CT_DISK}]: " i; CT_DISK=${i:-$CT_DISK} </dev/tty
+  read -r -p "  Bridge      [vmbr0]: "       i; CT_BRG=${i:-vmbr0} </dev/tty
+  read -r -p "  IP (blank=DHCP): "           i; CT_NET=${i:-dhcp} </dev/tty
   CT_GATE=""
   [[ "${CT_NET}" != "dhcp" ]] && { read -r -p "  Gateway: " i; CT_GATE=${i:-""}; }
-  read -r -p "  VLAN (blank=none): "         i; CT_VLAN=${i:-""}
+  read -r -p "  VLAN (blank=none): "         i; CT_VLAN=${i:-""} </dev/tty
 }
 
 check_existing() {
   if pct list 2>/dev/null | grep -qi "${NSAPP}"; then
     echo -e "\n${YW}Existing StreamForge container found.${CL}"
-    read -r -p "Update it? [y/N]: " upd
+    read -r -p "Update it? [y/N]: " upd </dev/tty
     if [[ "${upd,,}" == "y" ]]; then
       CT_ID=$(pct list 2>/dev/null | grep -i "${NSAPP}" | awk '{print $1}' | head -1)
       push_file "${B64_PKG}"   "/opt/streamforge/server/package.json" "package.json"
