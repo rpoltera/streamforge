@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+: "${MAC:=}"
 source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: rpoltera
