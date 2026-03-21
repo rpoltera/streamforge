@@ -1494,17 +1494,19 @@ app.post('/api/ai/build-schedule', async (req, res) => {
   );
 
   const systemPrompt = `You are a TV scheduling assistant for StreamForge, an IPTV playout manager.
-Your job: match media from the user's library to an EPG guide to build a playout queue.
+Your job: match media from the user's library to fill every single slot in a 24-hour EPG schedule.
 
 CRITICAL RULES:
 1. MediaId MUST be an exact UUID copied from the library — never invent one.
-2. Use FUZZY matching — "Family Guy" in EPG matches "Family Guy" anywhere in library title.
-3. Shows marked ✓MATCH in the library are strong candidates — prioritise them.
-4. If a show has EPISODE DETAILS listed, use those specific IDs for suggestions.
-5. Follow the EPG schedule exactly — match the exact number of occurrences per day. If the EPG has a show at 9pm and 11pm, schedule it at both slots. If once, once only.
-6. If a show has NO match in the library, assign a filler show from the library to replace it — and treat that filler show as if it IS that EPG show. Mirror the EPG schedule exactly: if the unmatched show appears 3 times in the EPG that day, the filler show appears 3 times in those same slots. If it appears once, the filler appears once.
-7. Use the same filler show consistently for the same unmatched slot across days.
-8. Do not repeat a filler show back to back in the queue.
+2. You will receive the FULL 24-hour schedule with every time slot. You MUST return a suggestion for EVERY slot — no slot can be left empty.
+3. Use FUZZY matching — "Family Guy" in EPG matches "Family Guy" anywhere in library title.
+4. Shows marked ✓MATCH are strong candidates — prioritise them for their matching slots.
+5. If a show has EPISODE DETAILS listed, use those specific IDs.
+6. For each EPG slot, find the best library match. If no title match exists, pick any appropriate library show as filler for that slot.
+7. Follow EPG frequency exactly — if a show appears 3 times in the schedule, fill those 3 slots. Do not add extra slots.
+8. Use the same filler show consistently for the same recurring unmatched title.
+9. Do not place the same filler show back to back — vary it.
+10. Return one suggestion per EPG slot in order.
 
 Return ONLY valid JSON, no markdown:
 {
@@ -1512,14 +1514,23 @@ Return ONLY valid JSON, no markdown:
   "suggestions": [
     { "mediaId": "exact-uuid", "title": "title", "reason": "why it matches" }
   ],
-  "unmatchedSlots": ["EPG titles with genuinely no library match"]
+  "unmatchedSlots": ["EPG titles with no library match that used filler"]
 }`;
+
+  // Build full 24h slot list with occurrence counts
+  const slotCounts = {};
+  programs.forEach(p => { slotCounts[p.title] = (slotCounts[p.title] || 0) + 1; });
+  const fullSchedule = programs.map(p => {
+    const t = new Date(p.start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'America/Los_Angeles' });
+    const dur = p.stop && p.start ? Math.round((p.stop - p.start) / 60000) + 'min' : '';
+    return `  ${t} [${dur}] "${p.title}"`;
+  }).join('\n');
 
   const userMessage = `EPG Channel: ${epgChannel?.name || channelId}
 Date: ${date || 'today'}
 
-EPG UNIQUE TITLES TO MATCH (${epgTitleList.length} shows):
-${epgTitleList.slice(0, 80).map(t => `- "${t}"`).join('\n')}
+FULL 24-HOUR EPG SCHEDULE (${programs.length} slots — fill ALL of these):
+${fullSchedule}
 
 LIBRARY — TV Shows (${showMap.size} series total — shows marked ✓MATCH are fuzzy-matched to EPG):
 ${showLines.join('\n')}
