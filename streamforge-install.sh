@@ -5,6 +5,8 @@ source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxV
 # License: MIT
 # Source: https://github.com/rpoltera/streamforge
 
+APPLICATION="StreamForge"
+
 REPO="https://raw.githubusercontent.com/rpoltera/streamforge/main"
 INSTALL_DIR="/opt/streamforge"
 SERVICE_USER="streamforge"
