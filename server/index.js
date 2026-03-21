@@ -647,6 +647,8 @@ app.put('/api/config', (req, res) => {
     'openwebUIUrl','openwebUIKey','openwebUIModel',
     'ollamaUrl','ollamaModel',
     'customAiUrl','customAiKey','customAiModel',
+    'logoUrl',
+    'sdUsername','sdPassword','sdLineupId','sdAutoUpdate',
   ].forEach(k => {
     if (req.body[k] !== undefined) config[k] = req.body[k];
   });
@@ -1669,6 +1671,138 @@ app.get('/api/ai/models', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message, models: [] });
   }
+});
+
+// ── Schedules Direct auto-refresh ────────────────────────────────────────────
+async function schedulesDirectRefresh() {
+  if (!config.sdAutoUpdate || !config.sdUsername || !config.sdPassword || !config.sdLineupId) return;
+  const SD_BASE = 'https://json.schedulesdirect.org/20141201';
+  try {
+    const crypto = require('crypto');
+    const sha1pwd = crypto.createHash('sha1').update(config.sdPassword).digest('hex');
+    const tokenRes = await fetch(`${SD_BASE}/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: config.sdUsername, password: sha1pwd })
+    });
+    const tokenData = await tokenRes.json();
+    if (tokenData.code !== 0) throw new Error(tokenData.message || 'SD login failed');
+    const token = tokenData.token;
+    const headers = { 'Content-Type': 'application/json', token };
+
+    const lineupRes = await fetch(`${SD_BASE}/lineups/${config.sdLineupId}`, { headers });
+    const lineupData = await lineupRes.json();
+    const stationIds = (lineupData.stations || []).map(s => s.stationID);
+    const dates = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(); d.setDate(d.getDate() + i);
+      return d.toISOString().split('T')[0];
+    });
+
+    const schedRes = await fetch(`${SD_BASE}/schedules`, {
+      method: 'POST', headers,
+      body: JSON.stringify(stationIds.map(id => ({ stationID: id, date: dates })))
+    });
+    const schedules = await schedRes.json();
+
+    const programIds = [...new Set(schedules.flatMap(s => (s.programs || []).map(p => p.programID)))];
+    const progMap = {};
+    for (let i = 0; i < programIds.length; i += 500) {
+      const bRes = await fetch(`${SD_BASE}/programs`, {
+        method: 'POST', headers, body: JSON.stringify(programIds.slice(i, i + 500))
+      });
+      const batch = await bRes.json();
+      batch.forEach(p => { progMap[p.programID] = p; });
+    }
+
+    let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<tv>\n';
+    for (const st of (lineupData.stations || [])) {
+      xml += `  <channel id="${st.stationID}"><display-name>${(st.name||st.callsign||st.stationID).replace(/&/g,'&amp;')}</display-name></channel>\n`;
+    }
+    for (const sched of schedules) {
+      for (const p of (sched.programs || [])) {
+        const prog = progMap[p.programID] || {};
+        const title = (prog.titles || [])[0]?.title120 || p.programID;
+        const desc = (prog.descriptions?.description1000 || [{}])[0]?.description || '';
+        const start = p.airDateTime?.replace(/[-:]/g,'').replace('T','').replace('Z',' +0000') || '';
+        const dur = p.duration || 0;
+        const end = (() => { const d = new Date(p.airDateTime); d.setSeconds(d.getSeconds()+dur); return d.toISOString().replace(/[-:]/g,'').replace('T','').replace('.000Z',' +0000'); })();
+        const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        xml += `  <programme start="${esc(start)}" stop="${esc(end)}" channel="${esc(sched.stationID)}"><title>${esc(title)}</title>${desc?`<desc>${esc(desc)}</desc>`:''}</programme>\n`;
+      }
+    }
+    xml += '</tv>';
+
+    const parsed = parseXmltvContent(xml);
+    db.epg = { ...parsed, importedAt: new Date().toISOString(), sourceName: `Schedules Direct: ${config.sdLineupId}` };
+    saveAll();
+    console.log(`[sd-refresh] Updated EPG: ${parsed.programs.length} programs`);
+  } catch (e) {
+    console.error('[sd-refresh] Failed:', e.message);
+  }
+}
+
+// Run SD refresh on startup + every 24h
+schedulesDirectRefresh();
+setInterval(schedulesDirectRefresh, 24 * 60 * 60 * 1000);
+
+// ── Schedules Direct proxy ────────────────────────────────────────────────────
+const SD_BASE = 'https://json.schedulesdirect.org/20141201';
+const crypto  = require('crypto');
+
+app.post('/api/sd/token', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: 'username and password required' });
+    const sha1pwd = crypto.createHash('sha1').update(password).digest('hex');
+    const r = await fetch(`${SD_BASE}/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password: sha1pwd })
+    });
+    const data = await r.json();
+    res.json(data);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/sd/lineups', async (req, res) => {
+  try {
+    const { token } = req.query;
+    if (!token) return res.status(400).json({ error: 'token required' });
+    const r = await fetch(`${SD_BASE}/lineups`, { headers: { token } });
+    res.json(await r.json());
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/sd/lineups/:id', async (req, res) => {
+  try {
+    const { token } = req.query;
+    const r = await fetch(`${SD_BASE}/lineups/${req.params.id}`, { headers: { token } });
+    res.json(await r.json());
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/sd/schedules', async (req, res) => {
+  try {
+    const { token } = req.query;
+    const r = await fetch(`${SD_BASE}/schedules`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', token },
+      body: JSON.stringify(req.body)
+    });
+    res.json(await r.json());
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/sd/programs', async (req, res) => {
+  try {
+    const { token } = req.query;
+    const r = await fetch(`${SD_BASE}/programs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', token },
+      body: JSON.stringify(req.body)
+    });
+    res.json(await r.json());
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── SPA fallback ──────────────────────────────────────────────────────────────
