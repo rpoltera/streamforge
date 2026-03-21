@@ -14,11 +14,6 @@ var_os="debian"
 var_version="12"
 var_unprivileged="1"
 
-# Override install script location to our own repo
-function install_script() {
-  bash -c "$(curl -fsSL https://raw.githubusercontent.com/rpoltera/streamforge/main/streamforge-install.sh)"
-}
-
 header_info "$APP"
 variables
 color
@@ -33,7 +28,7 @@ function update_script() {
     exit
   fi
   msg_info "Updating ${APP}"
-  bash -c "$(curl -fsSL https://raw.githubusercontent.com/rpoltera/streamforge/main/streamforge-install.sh) update"
+  bash <(curl -fsSL https://raw.githubusercontent.com/rpoltera/streamforge/main/install/streamforge-install.sh) update
   msg_ok "Updated ${APP}"
   exit
 }
