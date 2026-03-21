@@ -105,40 +105,6 @@ pct create "$CTID" "$OS_TEMPLATE" \
   --password "$ROOT_PASS" &>/dev/null
 msg_ok "Created LXC container ${CTID}"
 
-# ── GPU passthrough (NVIDIA) ──────────────────────────────────────────────────
-if command -v nvidia-smi &>/dev/null; then
-  msg_info "Configuring NVIDIA GPU passthrough"
-  LXC_CONF="/etc/pve/lxc/${CTID}.conf"
-
-  # Allow GPU device access
-  echo "lxc.cgroup2.devices.allow: c 195:* rwm" >> "$LXC_CONF"
-  echo "lxc.cgroup2.devices.allow: c 234:* rwm" >> "$LXC_CONF"
-  echo "lxc.cgroup2.devices.allow: c 239:* rwm" >> "$LXC_CONF"
-
-  # Bind-mount NVIDIA devices
-  for DEV in /dev/nvidia0 /dev/nvidia1 /dev/nvidia2 /dev/nvidia3 /dev/nvidiactl /dev/nvidia-uvm /dev/nvidia-uvm-tools /dev/nvidia-modeset; do
-    [[ -e "$DEV" ]] && echo "lxc.mount.entry: $DEV ${DEV#/} none bind,optional,create=file 0 0" >> "$LXC_CONF"
-  done
-
-  # Bind-mount individual NVIDIA libraries (not the whole directory)
-  for LIB in /usr/lib/x86_64-linux-gnu/libcuda.so* \
-              /usr/lib/x86_64-linux-gnu/libnvcuvid.so* \
-              /usr/lib/x86_64-linux-gnu/libnvidia-encode.so* \
-              /usr/lib/x86_64-linux-gnu/libnvidia-decode.so* \
-              /usr/lib/x86_64-linux-gnu/libnvidia-ml.so* \
-              /usr/lib/x86_64-linux-gnu/libGL.so* \
-              /usr/lib/x86_64-linux-gnu/libEGL*.so*; do
-    [[ -e "$LIB" ]] && echo "lxc.mount.entry: $LIB ${LIB#/} none bind,optional,create=file 0 0" >> "$LXC_CONF"
-  done
-
-  # Mount nvidia-smi binary
-  [[ -f /usr/bin/nvidia-smi ]] && echo "lxc.mount.entry: /usr/bin/nvidia-smi usr/bin/nvidia-smi none bind,optional,create=file 0 0" >> "$LXC_CONF"
-
-  msg_ok "GPU passthrough configured"
-else
-  msg_info "No NVIDIA GPU detected — skipping GPU passthrough"
-fi
-
 # ── Start container ───────────────────────────────────────────────────────────
 msg_info "Starting container"
 pct start "$CTID"
