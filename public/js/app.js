@@ -11,6 +11,17 @@ function fmtDur(s){if(!s)return'0:00';const h=Math.floor(s/3600),m=Math.floor((s
 function fmtTime(ts){if(!ts)return'';return new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}
 function notify(msg,err=false){const el=document.getElementById('notif');el.textContent=msg;el.className='notif show'+(err?' err':'');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('show'),3500)}
 
+async function sdAddLineup(lineupId, lineupName){
+  const status = document.getElementById('sd-status');
+  const tok = encodeURIComponent(window._sdToken||'');
+  try {
+    status.textContent = `Adding ${lineupName}...`;
+    await fetch(`/api/sd/lineups/${lineupId}?token=${tok}`, {method:'PUT'});
+    status.textContent = `✅ Added ${lineupName}! Click Fetch Lineups again.`;
+    notify('Lineup added to Schedules Direct');
+  } catch(e){ status.textContent = 'Error: ' + e.message; }
+}
+
 function applyLogoUrl(url){
   const img = document.getElementById('app-logo-img');
   const fav = document.getElementById('app-favicon');
@@ -38,16 +49,49 @@ function applyLogoUrl(url){
     status.textContent = 'Logging in...';
     try {
       sdToken = await sdLogin(user, pass);
+      window._sdToken = sdToken;
       const account = await API.get(`/api/sd/lineups?token=${encodeURIComponent(sdToken)}`);
-      const sdLineups = account.lineups || [];
+      const sdLineups = (account.lineups || []);
+      if(sdLineups.length === 0){
+        document.getElementById('sd-add-lineup-wrap').style.display = '';
+        document.getElementById('sd-lineups-wrap').style.display = 'none';
+        status.textContent = 'Logged in! No lineups found on your SD-JSON account — search by zip code to add one.';
+        return;
+      }
       const sel = document.getElementById('sd-lineup');
       sel.innerHTML = sdLineups.map(l=>`<option value="${esc(l.lineup)}">${esc(l.name)} (${esc(l.location)})</option>`).join('');
       document.getElementById('sd-lineups-wrap').style.display = '';
-      document.getElementById('btn-sd-import').style.display = '';
-      document.getElementById('btn-sd-save').style.display = '';
+      document.getElementById('sd-add-lineup-wrap').style.display = 'none';
       status.textContent = `Found ${sdLineups.length} lineup(s). Select one and click Import Guide.`;
     } catch(e) {
       status.textContent = 'Error: ' + e.message;
+    }
+  });
+
+  document.getElementById('btn-sd-search')?.addEventListener('click', async () => {
+    const zip = document.getElementById('sd-zip').value.trim();
+    const country = document.getElementById('sd-country').value.trim() || 'USA';
+    const status = document.getElementById('sd-status');
+    const results = document.getElementById('sd-search-results');
+    if(!zip){ status.textContent='Enter a zip code.'; return; }
+    if(!sdToken){ status.textContent='Fetch lineups first to log in.'; return; }
+    results.innerHTML = 'Searching...';
+    try {
+      const headends = await API.get(`/api/sd/headends?token=${encodeURIComponent(sdToken)}&country=${country}&postalcode=${zip}`);
+      if(!headends.length){ results.innerHTML='<div style="color:var(--text-muted)">No lineups found for that zip code.</div>'; return; }
+      let html = '<div style="display:flex;flex-direction:column;gap:8px">';
+      for(const h of headends){
+        for(const l of (h.lineups||[])){
+          html += `<div style="display:flex;align-items:center;gap:10px;padding:8px;background:var(--bg2);border-radius:6px">
+            <div style="flex:1"><div style="font-weight:600">${esc(l.name)}</div><div style="font-size:12px;color:var(--text-muted)">${esc(h.headend)} · ${esc(h.location)} · ${esc(l.type)}</div></div>
+            <button class="btn btn-sm btn-primary" onclick="sdAddLineup('${esc(l.lineup)}','${esc(l.name)}')">+ Add</button>
+          </div>`;
+        }
+      }
+      html += '</div>';
+      results.innerHTML = html;
+    } catch(e) {
+      results.innerHTML = `<div style="color:var(--danger)">${e.message}</div>`;
     }
   });
 
