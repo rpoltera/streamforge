@@ -145,11 +145,14 @@ SERVICE
   printf '#!/bin/bash\nbash <(curl -fsSL https://raw.githubusercontent.com/rpoltera/streamforge/main/streamforge-install.sh) update\n' > /usr/local/bin/streamforge-update
   chmod +x /usr/local/bin/streamforge-update
 
-  motd_ssh
-  customize
+  command -v motd_ssh &>/dev/null && motd_ssh || true
+  command -v customize &>/dev/null && customize || true
 }
 
 # ── Entry point ───────────────────────────────────────────────────────────────
+# Safe defaults for variables that may not be set
+: "${MAC:=}" "${CTID:=}" "${PCT_OSTYPE:=debian}" "${PCT_OSVERSION:=12}"
+
 if [[ "${1:-}" == "update" ]]; then
   update_script
 else
