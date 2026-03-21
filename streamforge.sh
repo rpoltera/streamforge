@@ -105,6 +105,37 @@ pct create "$CTID" "$OS_TEMPLATE" \
   --password "$ROOT_PASS" &>/dev/null
 msg_ok "Created LXC container ${CTID}"
 
+# ── GPU passthrough (NVIDIA) ──────────────────────────────────────────────────
+if command -v nvidia-smi &>/dev/null; then
+  msg_info "Configuring NVIDIA GPU passthrough"
+  LXC_CONF="/etc/pve/lxc/${CTID}.conf"
+
+  # Allow GPU device access
+  echo "lxc.cgroup2.devices.allow: c 195:* rwm" >> "$LXC_CONF"
+  echo "lxc.cgroup2.devices.allow: c 234:* rwm" >> "$LXC_CONF"
+  echo "lxc.cgroup2.devices.allow: c 239:* rwm" >> "$LXC_CONF"
+
+  # Bind-mount NVIDIA devices
+  for DEV in /dev/nvidia* /dev/nvidiactl /dev/nvidia-uvm /dev/nvidia-uvm-tools /dev/nvidia-modeset; do
+    [[ -e "$DEV" ]] && echo "lxc.mount.entry: $DEV ${DEV#/} none bind,optional,create=file 0 0" >> "$LXC_CONF"
+  done
+
+  # Bind-mount NVIDIA libraries from host so no driver install needed inside LXC
+  for LIB_DIR in /usr/lib/x86_64-linux-gnu /usr/lib64; do
+    if ls "${LIB_DIR}"/libcuda.so* &>/dev/null 2>&1; then
+      echo "lxc.mount.entry: ${LIB_DIR} ${LIB_DIR#/} none bind,optional,create=dir 0 0" >> "$LXC_CONF"
+      break
+    fi
+  done
+
+  # Mount nvidia-smi binary
+  [[ -f /usr/bin/nvidia-smi ]] && echo "lxc.mount.entry: /usr/bin/nvidia-smi usr/bin/nvidia-smi none bind,optional,create=file 0 0" >> "$LXC_CONF"
+
+  msg_ok "GPU passthrough configured"
+else
+  msg_info "No NVIDIA GPU detected — skipping GPU passthrough"
+fi
+
 # ── Start container ───────────────────────────────────────────────────────────
 msg_info "Starting container"
 pct start "$CTID"
