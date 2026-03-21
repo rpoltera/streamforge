@@ -66,6 +66,14 @@ if [[ -z "$OS_TEMPLATE" ]]; then
 fi
 msg_ok "Template: $OS_TEMPLATE"
 
+# ── Root password ─────────────────────────────────────────────────────────────
+while true; do
+  read -r -s -p "  Set root password for container: " ROOT_PASS < /dev/tty; echo
+  read -r -s -p "  Confirm password: " ROOT_PASS2 < /dev/tty; echo
+  [[ "$ROOT_PASS" == "$ROOT_PASS2" ]] && break
+  echo -e "${RD}  Passwords do not match, try again.${CL}"
+done
+
 # ── Show settings & confirm ───────────────────────────────────────────────────
 echo -e "\n${BOLD}  Container Settings${CL}"
 echo -e "${INFO}Container ID:   ${BGN}${CTID}${CL}"
@@ -78,7 +86,7 @@ echo -e "${INFO}Bridge:         ${BGN}${BRIDGE}${CL}"
 echo -e "${INFO}Network:        ${BGN}${NET}${CL}"
 echo -e "${INFO}Type:           ${BGN}Unprivileged${CL}\n"
 
-read -r -p "  Create StreamForge LXC with these settings? [Y/n]: " confirm
+read -r -p "  Create StreamForge LXC with these settings? [Y/n]: " confirm < /dev/tty
 [[ "${confirm,,}" == "n" ]] && echo "Aborted." && exit 0
 
 # ── Create LXC ────────────────────────────────────────────────────────────────
@@ -93,7 +101,8 @@ pct create "$CTID" "$OS_TEMPLATE" \
   --unprivileged "$UNPRIVILEGED" \
   --features nesting=1 \
   --onboot 1 \
-  --start 0 &>/dev/null
+  --start 0 \
+  --password "$ROOT_PASS" &>/dev/null
 msg_ok "Created LXC container ${CTID}"
 
 # ── Start container ───────────────────────────────────────────────────────────
