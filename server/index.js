@@ -1773,6 +1773,25 @@ app.get('/api/sd/lineups', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Search available lineups by zip/postal code
+app.get('/api/sd/headends', async (req, res) => {
+  try {
+    const { token, country, postalcode } = req.query;
+    if (!token) return res.status(400).json({ error: 'token required' });
+    const r = await fetch(`${SD_BASE}/headends?country=${country||'USA'}&postalcode=${postalcode}`, { headers: { token } });
+    res.json(await r.json());
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Add a lineup to SD-JSON account
+app.put('/api/sd/lineups/:id', async (req, res) => {
+  try {
+    const { token } = req.query;
+    const r = await fetch(`${SD_BASE}/lineups/${req.params.id}`, { method: 'PUT', headers: { token } });
+    res.json(await r.json());
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/api/sd/lineups/:id', async (req, res) => {
   try {
     const { token } = req.query;
