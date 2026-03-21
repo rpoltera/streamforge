@@ -11,6 +11,131 @@ function fmtDur(s){if(!s)return'0:00';const h=Math.floor(s/3600),m=Math.floor((s
 function fmtTime(ts){if(!ts)return'';return new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}
 function notify(msg,err=false){const el=document.getElementById('notif');el.textContent=msg;el.className='notif show'+(err?' err':'');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('show'),3500)}
 
+function applyLogoUrl(url){
+  const img = document.getElementById('app-logo-img');
+  const fav = document.getElementById('app-favicon');
+  if(url && url.trim()){
+    if(img) img.src = url.trim();
+    if(fav) fav.href = url.trim();
+  }
+}
+
+// ── Schedules Direct ──────────────────────────────────────────────────────────
+(function initSchedulesDirect(){
+  const SD_BASE = 'https://json.schedulesdirect.org/20141201';
+  let sdToken = null;
+  let sdLineups = [];
+
+  async function sdRequest(path, method='GET', body=null, token=null){
+    const headers = {'Content-Type':'application/json'};
+    if(token) headers['token'] = token;
+    const opts = {method, headers};
+    if(body) opts.body = JSON.stringify(body);
+    const r = await fetch(SD_BASE + path, opts);
+    if(!r.ok) throw new Error(`SD API error ${r.status}`);
+    return r.json();
+  }
+
+  async function sdLogin(username, password){
+    const sha1 = async (str) => {
+      const buf = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(str));
+      return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+    };
+    const data = await sdRequest('/token', 'POST', {username, password: await sha1(password)});
+    if(data.code !== 0) throw new Error(data.message || 'Login failed');
+    return data.token;
+  }
+
+  document.getElementById('btn-sd-lineups')?.addEventListener('click', async () => {
+    const user = document.getElementById('sd-username').value.trim();
+    const pass = document.getElementById('sd-password').value.trim();
+    const status = document.getElementById('sd-status');
+    if(!user || !pass){ status.textContent='Enter username and password.'; return; }
+    status.textContent = 'Logging in...';
+    try {
+      sdToken = await sdLogin(user, pass);
+      const account = await sdRequest('/lineups', 'GET', null, sdToken);
+      sdLineups = account.lineups || [];
+      const sel = document.getElementById('sd-lineup');
+      sel.innerHTML = sdLineups.map(l=>`<option value="${esc(l.lineup)}">${esc(l.name)} (${esc(l.location)})</option>`).join('');
+      document.getElementById('sd-lineups-wrap').style.display = '';
+      document.getElementById('btn-sd-import').style.display = '';
+      document.getElementById('btn-sd-save').style.display = '';
+      status.textContent = `Found ${sdLineups.length} lineup(s). Select one and click Import Guide.`;
+    } catch(e) {
+      status.textContent = 'Error: ' + e.message;
+    }
+  });
+
+  document.getElementById('btn-sd-import')?.addEventListener('click', async () => {
+    const lineupId = document.getElementById('sd-lineup').value;
+    const status = document.getElementById('sd-status');
+    if(!lineupId || !sdToken){ status.textContent='Fetch lineups first.'; return; }
+    status.textContent = 'Fetching programs (this may take a moment)...';
+    try {
+      // Get lineup channels
+      const lineupData = await sdRequest(`/lineups/${lineupId}`, 'GET', null, sdToken);
+      const stationIds = (lineupData.stations||[]).map(s=>s.stationID);
+      // Get schedules (in batches of 5000)
+      const today = new Date().toISOString().split('T')[0];
+      const dates = Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()+i);return d.toISOString().split('T')[0];});
+      const schedReq = stationIds.map(id=>({stationID:id,date:dates}));
+      const schedules = await sdRequest('/schedules', 'POST', schedReq, sdToken);
+      // Get program details
+      const programIds = [...new Set(schedules.flatMap(s=>(s.programs||[]).map(p=>p.programID)))];
+      const programs = [];
+      for(let i=0;i<programIds.length;i+=500){
+        const batch = await sdRequest('/programs', 'POST', programIds.slice(i,i+500), sdToken);
+        programs.push(...batch);
+      }
+      const progMap = Object.fromEntries(programs.map(p=>[p.programID, p]));
+      // Build XMLTV
+      let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<tv>\n';
+      const stations = lineupData.stations||[];
+      for(const st of stations){
+        xml += `  <channel id="${esc(st.stationID)}"><display-name>${esc(st.name||st.callsign||st.stationID)}</display-name></channel>\n`;
+      }
+      for(const sched of schedules){
+        for(const p of (sched.programs||[])){
+          const prog = progMap[p.programID]||{};
+          const titles = prog.titles||[];
+          const title = titles[0]?.title120||p.programID;
+          const desc = (prog.descriptions?.description1000||[{}])[0]?.description||'';
+          const start = p.airDateTime?.replace(/[-:]/g,'').replace('T','').replace('Z',' +0000')||'';
+          const dur = p.duration||0;
+          const end = start ? (() => {
+            const d=new Date(p.airDateTime);d.setSeconds(d.getSeconds()+dur);
+            return d.toISOString().replace(/[-:]/g,'').replace('T','').replace('.000Z',' +0000');
+          })() : '';
+          xml += `  <programme start="${esc(start)}" stop="${esc(end)}" channel="${esc(sched.stationID)}">\n`;
+          xml += `    <title>${esc(title)}</title>\n`;
+          if(desc) xml += `    <desc>${esc(desc)}</desc>\n`;
+          xml += `  </programme>\n`;
+        }
+      }
+      xml += '</tv>';
+      // Import into StreamForge
+      const res = await API.post('/api/epg/import', {xmltv: xml, sourceName: `Schedules Direct: ${lineupId}`});
+      status.textContent = `Imported ${res.programCount||0} programs across ${res.channelCount||0} channels!`;
+      notify('Schedules Direct guide imported');
+      loadEpgStatus();
+    } catch(e) {
+      status.textContent = 'Error: ' + e.message;
+    }
+  });
+
+  document.getElementById('btn-sd-save')?.addEventListener('click', async () => {
+    const user = document.getElementById('sd-username').value.trim();
+    const pass = document.getElementById('sd-password').value.trim();
+    const lineupId = document.getElementById('sd-lineup').value;
+    const status = document.getElementById('sd-status');
+    if(!user || !pass || !lineupId){ status.textContent='Fill all fields first.'; return; }
+    await API.put('/api/config', {sdUsername: user, sdPassword: pass, sdLineupId: lineupId, sdAutoUpdate: true});
+    status.textContent = '✅ Saved! Guide will auto-refresh daily.';
+    notify('Schedules Direct auto-update saved');
+  });
+})();
+
 // ── Navigation ────────────────────────────────────────────────────────────────
 function showPage(name){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
@@ -895,6 +1020,9 @@ async function loadSettings(){
 
     // General
     document.getElementById('cfg-baseurl').value = cfg.baseUrl||'';
+    const logoUrlEl = document.getElementById('cfg-logo-url');
+    if(logoUrlEl) logoUrlEl.value = cfg.logoUrl||'';
+    applyLogoUrl(cfg.logoUrl||'');
 
     // AI provider
     const provider = cfg.aiProvider || 'anthropic';
@@ -1008,6 +1136,7 @@ document.getElementById('btn-save-config').addEventListener('click',async()=>{
       // General
       baseUrl:      document.getElementById('cfg-baseurl').value.trim(),
       epgDaysAhead: parseInt(document.getElementById('cfg-days').value),
+      logoUrl:      (document.getElementById('cfg-logo-url')||{value:''}).value.trim(),
       // FFmpeg
       ffmpegPath:   document.getElementById('cfg-ffmpeg').value.trim(),
       ffprobePath:  document.getElementById('cfg-ffprobe').value.trim(),
