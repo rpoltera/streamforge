@@ -1502,7 +1502,7 @@ CRITICAL RULES:
 3. Shows marked ✓MATCH in the library are strong candidates — prioritise them.
 4. If a show has EPISODE DETAILS listed, use those specific IDs for suggestions.
 5. Suggest multiple episodes per show (S01E01, S01E02, etc.) to fill the schedule.
-6. If no exact match, suggest thematically similar content from the library.
+6. ONLY suggest content that is a genuine title match. Do NOT suggest "thematically similar" or "related" content — if "American Dad" is in the EPG but not in the library, leave it in unmatchedSlots. Never substitute a different show.
 7. Do NOT say you cannot find something unless it truly has zero library candidates.
 
 Return ONLY valid JSON, no markdown:
