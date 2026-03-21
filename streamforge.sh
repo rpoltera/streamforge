@@ -152,15 +152,23 @@ SERVICE
   chmod +x /usr/local/bin/streamforge-update
 }
 
+
+# Override community-scripts summary helper to avoid fragile unset vars in newer helper releases.
+description() {
+  return 0
+}
+
 # ── Entry point ─────────────────────────────────────────────────
 if [[ "${1:-}" == "update" ]]; then
   update_script
 else
   start
   build_container
+  # description helper intentionally overridden above
   description
   msg_ok "Completed Successfully!\n"
   echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
   echo -e "${INFO}${YW} Access it using the following URL:${CL}"
-  echo -e "${TAB}${GATEWAY}${BGN}http://${IP}${CL}"
+  local_url="http://${IP:-$(hostname -I 2>/dev/null | awk '{print $1}')}"
+  echo -e "${TAB}${BGN}${local_url}${CL}"
 fi
