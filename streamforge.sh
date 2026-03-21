@@ -110,7 +110,7 @@ msg_ok "Container running"
 
 # ── Run install script inside LXC ─────────────────────────────────────────────
 msg_info "Installing StreamForge (this takes a few minutes)"
-pct exec "$CTID" -- bash -c "curl -fsSL ${INSTALL_URL} | bash"
+pct exec "$CTID" -- bash -c "apt-get update -qq && apt-get install -y -qq curl && curl -fsSL ${INSTALL_URL} | bash"
 msg_ok "StreamForge installed"
 
 # ── Get IP ────────────────────────────────────────────────────────────────────
