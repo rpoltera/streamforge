@@ -38,8 +38,36 @@ function applyLogoUrl(url){
 
   async function sdLogin(username, password){
     const sha1 = async (str) => {
-      const buf = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(str));
-      return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+      // Pure JS SHA-1 — works over HTTP where crypto.subtle is unavailable
+      function sha1js(msg) {
+        function rotl(n,s){return(n<<s)|(n>>>(32-s));}
+        function tohex(n){let s='';for(let i=28;i>=0;i-=4)s+='0123456789abcdef'.charAt((n>>i)&0xf);return s;}
+        const bytes = new TextEncoder().encode(msg);
+        let M = Array.from(bytes);
+        const l = M.length * 8;
+        M.push(0x80);
+        while(M.length % 64 !== 56) M.push(0);
+        for(let i=7;i>=0;i--) M.push((l/Math.pow(2,i*8))&0xff);
+        let h0=0x67452301,h1=0xEFCDAB89,h2=0x98BADCFE,h3=0x10325476,h4=0xC3D2E1F0;
+        for(let i=0;i<M.length;i+=64){
+          const W=[];
+          for(let j=0;j<16;j++) W[j]=(M[i+j*4]<<24)|(M[i+j*4+1]<<16)|(M[i+j*4+2]<<8)|M[i+j*4+3];
+          for(let j=16;j<80;j++) W[j]=rotl(W[j-3]^W[j-8]^W[j-14]^W[j-16],1);
+          let a=h0,b=h1,c=h2,d=h3,e=h4;
+          for(let j=0;j<80;j++){
+            let f,k;
+            if(j<20){f=(b&c)|((~b)&d);k=0x5A827999;}
+            else if(j<40){f=b^c^d;k=0x6ED9EBA1;}
+            else if(j<60){f=(b&c)|(b&d)|(c&d);k=0x8F1BBCDC;}
+            else{f=b^c^d;k=0xCA62C1D6;}
+            const temp=(rotl(a,5)+f+e+k+W[j])>>>0;
+            e=d;d=c;c=rotl(b,30);b=a;a=temp;
+          }
+          h0=(h0+a)>>>0;h1=(h1+b)>>>0;h2=(h2+c)>>>0;h3=(h3+d)>>>0;h4=(h4+e)>>>0;
+        }
+        return tohex(h0)+tohex(h1)+tohex(h2)+tohex(h3)+tohex(h4);
+      }
+      return sha1js(str);
     };
     const data = await sdRequest('/token', 'POST', {username, password: await sha1(password)});
     if(data.code !== 0) throw new Error(data.message || 'Login failed');
