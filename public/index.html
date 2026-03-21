@@ -716,14 +716,31 @@
               <input class="form-input" id="sd-password" type="password" placeholder="Schedules Direct password">
             </div>
           </div>
-          <div id="sd-lineups-wrap" style="display:none;margin-top:14px">
-            <label class="form-label">Lineup</label>
-            <select class="form-input" id="sd-lineup" style="margin-bottom:10px"></select>
-          </div>
           <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
             <button class="btn btn-secondary" id="btn-sd-lineups">🔍 Fetch Lineups</button>
-            <button class="btn btn-primary" id="btn-sd-import" style="display:none">⬇ Import Guide</button>
-            <button class="btn btn-secondary" id="btn-sd-save" style="display:none">💾 Save &amp; Auto-Update</button>
+          </div>
+          <div id="sd-lineups-wrap" style="display:none;margin-top:14px">
+            <label class="form-label">Your Lineups</label>
+            <select class="form-input" id="sd-lineup" style="margin-bottom:10px"></select>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <button class="btn btn-primary" id="btn-sd-import">⬇ Import Guide</button>
+              <button class="btn btn-secondary" id="btn-sd-save">💾 Save &amp; Auto-Update</button>
+            </div>
+          </div>
+          <div id="sd-add-lineup-wrap" style="display:none;margin-top:14px;padding:12px;background:var(--bg3);border-radius:8px">
+            <div class="form-label" style="margin-bottom:8px">No lineups found — search by zip code to add one:</div>
+            <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap">
+              <div class="form-group" style="margin:0;flex:0 0 120px">
+                <label class="form-label">Zip Code</label>
+                <input class="form-input" id="sd-zip" type="text" placeholder="97601" maxlength="10">
+              </div>
+              <div class="form-group" style="margin:0;flex:0 0 80px">
+                <label class="form-label">Country</label>
+                <input class="form-input" id="sd-country" type="text" placeholder="USA" maxlength="3" value="USA">
+              </div>
+              <button class="btn btn-secondary" id="btn-sd-search" style="margin-bottom:0">🔍 Search</button>
+            </div>
+            <div id="sd-search-results" style="margin-top:10px"></div>
           </div>
           <div id="sd-status" style="margin-top:10px;font-size:13px;color:var(--text-muted)"></div>
           <div class="form-hint" style="margin-top:10px">Requires a paid <a href="https://schedulesdirect.org" target="_blank" style="color:var(--accent)">Schedules Direct</a> account (~$35/yr). Once saved, the guide auto-refreshes daily.</div>
