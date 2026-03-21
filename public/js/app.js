@@ -22,54 +22,10 @@ function applyLogoUrl(url){
 
 // ── Schedules Direct ──────────────────────────────────────────────────────────
 (function initSchedulesDirect(){
-  const SD_BASE = 'https://json.schedulesdirect.org/20141201';
   let sdToken = null;
-  let sdLineups = [];
-
-  async function sdRequest(path, method='GET', body=null, token=null){
-    const headers = {'Content-Type':'application/json'};
-    if(token) headers['token'] = token;
-    const opts = {method, headers};
-    if(body) opts.body = JSON.stringify(body);
-    const r = await fetch(SD_BASE + path, opts);
-    if(!r.ok) throw new Error(`SD API error ${r.status}`);
-    return r.json();
-  }
 
   async function sdLogin(username, password){
-    const sha1 = async (str) => {
-      // Pure JS SHA-1 — works over HTTP where crypto.subtle is unavailable
-      function sha1js(msg) {
-        function rotl(n,s){return(n<<s)|(n>>>(32-s));}
-        function tohex(n){let s='';for(let i=28;i>=0;i-=4)s+='0123456789abcdef'.charAt((n>>i)&0xf);return s;}
-        const bytes = new TextEncoder().encode(msg);
-        let M = Array.from(bytes);
-        const l = M.length * 8;
-        M.push(0x80);
-        while(M.length % 64 !== 56) M.push(0);
-        for(let i=7;i>=0;i--) M.push((l/Math.pow(2,i*8))&0xff);
-        let h0=0x67452301,h1=0xEFCDAB89,h2=0x98BADCFE,h3=0x10325476,h4=0xC3D2E1F0;
-        for(let i=0;i<M.length;i+=64){
-          const W=[];
-          for(let j=0;j<16;j++) W[j]=(M[i+j*4]<<24)|(M[i+j*4+1]<<16)|(M[i+j*4+2]<<8)|M[i+j*4+3];
-          for(let j=16;j<80;j++) W[j]=rotl(W[j-3]^W[j-8]^W[j-14]^W[j-16],1);
-          let a=h0,b=h1,c=h2,d=h3,e=h4;
-          for(let j=0;j<80;j++){
-            let f,k;
-            if(j<20){f=(b&c)|((~b)&d);k=0x5A827999;}
-            else if(j<40){f=b^c^d;k=0x6ED9EBA1;}
-            else if(j<60){f=(b&c)|(b&d)|(c&d);k=0x8F1BBCDC;}
-            else{f=b^c^d;k=0xCA62C1D6;}
-            const temp=(rotl(a,5)+f+e+k+W[j])>>>0;
-            e=d;d=c;c=rotl(b,30);b=a;a=temp;
-          }
-          h0=(h0+a)>>>0;h1=(h1+b)>>>0;h2=(h2+c)>>>0;h3=(h3+d)>>>0;h4=(h4+e)>>>0;
-        }
-        return tohex(h0)+tohex(h1)+tohex(h2)+tohex(h3)+tohex(h4);
-      }
-      return sha1js(str);
-    };
-    const data = await sdRequest('/token', 'POST', {username, password: await sha1(password)});
+    const data = await API.post('/api/sd/token', {username, password});
     if(data.code !== 0) throw new Error(data.message || 'Login failed');
     return data.token;
   }
@@ -82,8 +38,8 @@ function applyLogoUrl(url){
     status.textContent = 'Logging in...';
     try {
       sdToken = await sdLogin(user, pass);
-      const account = await sdRequest('/lineups', 'GET', null, sdToken);
-      sdLineups = account.lineups || [];
+      const account = await API.get(`/api/sd/lineups?token=${encodeURIComponent(sdToken)}`);
+      const sdLineups = account.lineups || [];
       const sel = document.getElementById('sd-lineup');
       sel.innerHTML = sdLineups.map(l=>`<option value="${esc(l.lineup)}">${esc(l.name)} (${esc(l.location)})</option>`).join('');
       document.getElementById('sd-lineups-wrap').style.display = '';
@@ -101,50 +57,35 @@ function applyLogoUrl(url){
     if(!lineupId || !sdToken){ status.textContent='Fetch lineups first.'; return; }
     status.textContent = 'Fetching programs (this may take a moment)...';
     try {
-      // Get lineup channels
-      const lineupData = await sdRequest(`/lineups/${lineupId}`, 'GET', null, sdToken);
+      const tok = encodeURIComponent(sdToken);
+      const lineupData = await API.get(`/api/sd/lineups/${lineupId}?token=${tok}`);
       const stationIds = (lineupData.stations||[]).map(s=>s.stationID);
-      // Get schedules (in batches of 5000)
-      const today = new Date().toISOString().split('T')[0];
       const dates = Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()+i);return d.toISOString().split('T')[0];});
-      const schedReq = stationIds.map(id=>({stationID:id,date:dates}));
-      const schedules = await sdRequest('/schedules', 'POST', schedReq, sdToken);
-      // Get program details
+      const schedules = await API.post(`/api/sd/schedules?token=${tok}`, stationIds.map(id=>({stationID:id,date:dates})));
       const programIds = [...new Set(schedules.flatMap(s=>(s.programs||[]).map(p=>p.programID)))];
       const programs = [];
       for(let i=0;i<programIds.length;i+=500){
-        const batch = await sdRequest('/programs', 'POST', programIds.slice(i,i+500), sdToken);
+        const batch = await API.post(`/api/sd/programs?token=${tok}`, programIds.slice(i,i+500));
         programs.push(...batch);
       }
       const progMap = Object.fromEntries(programs.map(p=>[p.programID, p]));
-      // Build XMLTV
       let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<tv>\n';
-      const stations = lineupData.stations||[];
-      for(const st of stations){
+      for(const st of (lineupData.stations||[])){
         xml += `  <channel id="${esc(st.stationID)}"><display-name>${esc(st.name||st.callsign||st.stationID)}</display-name></channel>\n`;
       }
       for(const sched of schedules){
         for(const p of (sched.programs||[])){
           const prog = progMap[p.programID]||{};
-          const titles = prog.titles||[];
-          const title = titles[0]?.title120||p.programID;
+          const title = (prog.titles||[])[0]?.title120||p.programID;
           const desc = (prog.descriptions?.description1000||[{}])[0]?.description||'';
           const start = p.airDateTime?.replace(/[-:]/g,'').replace('T','').replace('Z',' +0000')||'';
-          const dur = p.duration||0;
-          const end = start ? (() => {
-            const d=new Date(p.airDateTime);d.setSeconds(d.getSeconds()+dur);
-            return d.toISOString().replace(/[-:]/g,'').replace('T','').replace('.000Z',' +0000');
-          })() : '';
-          xml += `  <programme start="${esc(start)}" stop="${esc(end)}" channel="${esc(sched.stationID)}">\n`;
-          xml += `    <title>${esc(title)}</title>\n`;
-          if(desc) xml += `    <desc>${esc(desc)}</desc>\n`;
-          xml += `  </programme>\n`;
+          const end = (()=>{const d=new Date(p.airDateTime);d.setSeconds(d.getSeconds()+(p.duration||0));return d.toISOString().replace(/[-:]/g,'').replace('T','').replace('.000Z',' +0000');})();
+          xml += `  <programme start="${esc(start)}" stop="${esc(end)}" channel="${esc(sched.stationID)}"><title>${esc(title)}</title>${desc?`<desc>${esc(desc)}</desc>`:''}</programme>\n`;
         }
       }
       xml += '</tv>';
-      // Import into StreamForge
-      const res = await API.post('/api/epg/import', {xmltv: xml, sourceName: `Schedules Direct: ${lineupId}`});
-      status.textContent = `Imported ${res.programCount||0} programs across ${res.channelCount||0} channels!`;
+      const result = await API.post('/api/epg/import', {xmltv: xml, sourceName: `Schedules Direct: ${lineupId}`});
+      status.textContent = `Imported ${result.programCount||0} programs across ${result.channelCount||0} channels!`;
       notify('Schedules Direct guide imported');
       loadEpgStatus();
     } catch(e) {
