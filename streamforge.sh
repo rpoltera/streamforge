@@ -116,16 +116,19 @@ if command -v nvidia-smi &>/dev/null; then
   echo "lxc.cgroup2.devices.allow: c 239:* rwm" >> "$LXC_CONF"
 
   # Bind-mount NVIDIA devices
-  for DEV in /dev/nvidia* /dev/nvidiactl /dev/nvidia-uvm /dev/nvidia-uvm-tools /dev/nvidia-modeset; do
+  for DEV in /dev/nvidia0 /dev/nvidia1 /dev/nvidia2 /dev/nvidia3 /dev/nvidiactl /dev/nvidia-uvm /dev/nvidia-uvm-tools /dev/nvidia-modeset; do
     [[ -e "$DEV" ]] && echo "lxc.mount.entry: $DEV ${DEV#/} none bind,optional,create=file 0 0" >> "$LXC_CONF"
   done
 
-  # Bind-mount NVIDIA libraries from host so no driver install needed inside LXC
-  for LIB_DIR in /usr/lib/x86_64-linux-gnu /usr/lib64; do
-    if ls "${LIB_DIR}"/libcuda.so* &>/dev/null 2>&1; then
-      echo "lxc.mount.entry: ${LIB_DIR} ${LIB_DIR#/} none bind,optional,create=dir 0 0" >> "$LXC_CONF"
-      break
-    fi
+  # Bind-mount individual NVIDIA libraries (not the whole directory)
+  for LIB in /usr/lib/x86_64-linux-gnu/libcuda.so* \
+              /usr/lib/x86_64-linux-gnu/libnvcuvid.so* \
+              /usr/lib/x86_64-linux-gnu/libnvidia-encode.so* \
+              /usr/lib/x86_64-linux-gnu/libnvidia-decode.so* \
+              /usr/lib/x86_64-linux-gnu/libnvidia-ml.so* \
+              /usr/lib/x86_64-linux-gnu/libGL.so* \
+              /usr/lib/x86_64-linux-gnu/libEGL*.so*; do
+    [[ -e "$LIB" ]] && echo "lxc.mount.entry: $LIB ${LIB#/} none bind,optional,create=file 0 0" >> "$LXC_CONF"
   done
 
   # Mount nvidia-smi binary
