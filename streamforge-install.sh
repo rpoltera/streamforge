@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/install.func)
-# Copyright (c) 2021-2026 community-scripts ORG
-# Author: rpoltera
-# License: MIT
-# Source: https://github.com/rpoltera/streamforge
-
-APPLICATION="StreamForge"
+# StreamForge Install Script - runs inside LXC
+# https://github.com/rpoltera/streamforge
+set -euo pipefail
 
 REPO="https://raw.githubusercontent.com/rpoltera/streamforge/main"
 INSTALL_DIR="/opt/streamforge"
 SERVICE_USER="streamforge"
 
+YW=$(echo "\033[33m"); GN=$(echo "\033[1;92m"); RD=$(echo "\033[01;31m"); CL=$(echo "\033[m")
+msg_info()  { echo -e "  ⏳ ${YW}${1}${CL}"; }
+msg_ok()    { echo -e "  ✔️  ${GN}${1}${CL}"; }
+msg_error() { echo -e "  ✖️  ${RD}${1}${CL}"; exit 1; }
+
 # ── Update mode ───────────────────────────────────────────────────────────────
 if [[ "${1:-}" == "update" ]]; then
-  [[ ! -d $INSTALL_DIR ]] && echo "No StreamForge found" && exit 1
+  [[ ! -d $INSTALL_DIR ]] && msg_error "No StreamForge found" && exit 1
   systemctl stop streamforge 2>/dev/null || true
   pkill -9 -f ffmpeg 2>/dev/null || true
   msg_info "Downloading latest files"
@@ -28,22 +29,32 @@ if [[ "${1:-}" == "update" ]]; then
   msg_info "Starting StreamForge"
   systemctl start streamforge
   sleep 2
-  systemctl is-active --quiet streamforge && msg_ok "StreamForge running" || echo "Failed to start"
+  systemctl is-active --quiet streamforge && msg_ok "StreamForge running" || msg_error "Failed to start"
   exit 0
 fi
 
 # ── Fresh install ─────────────────────────────────────────────────────────────
-setting_up_container
-network_check
-update_os
+msg_info "Setting up container"
+export DEBIAN_FRONTEND=noninteractive
+echo 'LC_ALL=C' >> /etc/environment
+locale-gen C.UTF-8 2>/dev/null || true
+msg_ok "Set up Container OS"
+
+msg_info "Checking network"
+ping -c1 -W3 8.8.8.8 &>/dev/null && msg_ok "Network Connected" || msg_error "No network"
+
+msg_info "Updating OS"
+apt-get update -qq
+apt-get upgrade -y -qq
+msg_ok "Updated Container OS"
 
 msg_info "Installing Dependencies"
-$STD apt-get install -y curl wget ffmpeg nginx
+apt-get install -y -qq curl wget ffmpeg nginx
 msg_ok "Installed Dependencies"
 
 msg_info "Installing Node.js 20"
-$STD bash <(curl -fsSL https://deb.nodesource.com/setup_20.x)
-$STD apt-get install -y nodejs
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash - &>/dev/null
+apt-get install -y -qq nodejs
 msg_ok "Installed Node.js $(node --version)"
 
 msg_info "Setting Up StreamForge"
@@ -57,7 +68,7 @@ curl -fsSL "$REPO/public/index.html"   -o "$INSTALL_DIR/public/index.html"
 curl -fsSL "$REPO/public/css/main.css" -o "$INSTALL_DIR/public/css/main.css"
 curl -fsSL "$REPO/public/js/app.js"    -o "$INSTALL_DIR/public/js/app.js"
 
-cd $INSTALL_DIR/server && $STD npm install --production
+cd $INSTALL_DIR/server && npm install --production --quiet
 chown -R $SERVICE_USER:$SERVICE_USER $INSTALL_DIR /var/lib/streamforge
 chmod -R 755 $INSTALL_DIR /var/lib/streamforge
 msg_ok "StreamForge Set Up"
@@ -83,7 +94,7 @@ server {
 NGINX
 ln -sf /etc/nginx/sites-available/streamforge /etc/nginx/sites-enabled/
 rm -f /etc/nginx/sites-enabled/default
-$STD nginx -t && systemctl reload nginx
+nginx -t && systemctl reload nginx
 msg_ok "Configured Nginx"
 
 msg_info "Creating Service"
@@ -91,7 +102,6 @@ cat > /etc/systemd/system/streamforge.service << 'SERVICE'
 [Unit]
 Description=StreamForge IPTV Playout Manager
 After=network.target
-Documentation=https://github.com/rpoltera/streamforge
 
 [Service]
 Type=simple
@@ -111,11 +121,13 @@ Environment=SF_LOG=/var/lib/streamforge
 WantedBy=multi-user.target
 SERVICE
 systemctl daemon-reload
-$STD systemctl enable --now streamforge
+systemctl enable --now streamforge
 msg_ok "Created Service"
 
-printf '#!/bin/bash\nbash <(curl -fsSL https://raw.githubusercontent.com/rpoltera/streamforge/main/install/streamforge-install.sh) update\n' > /usr/local/bin/streamforge-update
+printf '#!/bin/bash\nbash <(curl -fsSL https://raw.githubusercontent.com/rpoltera/streamforge/main/streamforge-install.sh) update\n' > /usr/local/bin/streamforge-update
 chmod +x /usr/local/bin/streamforge-update
 
-motd_ssh
-customize
+IP=$(hostname -I | awk '{print $1}')
+echo ""
+echo -e "  ${GN}StreamForge installed successfully!${CL}"
+echo -e "  Access it at: http://${IP}"
