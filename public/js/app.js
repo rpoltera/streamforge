@@ -131,7 +131,7 @@ function applyLogoUrl(url){
       const result = await API.post('/api/epg/import', {xmltv: xml, sourceName: `Schedules Direct: ${lineupId}`});
       status.textContent = `Imported ${result.programCount||0} programs across ${result.channelCount||0} channels!`;
       notify('Schedules Direct guide imported');
-      loadEpgStatus();
+      loadEpgImport();
     } catch(e) {
       status.textContent = 'Error: ' + e.message;
     }
