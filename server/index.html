@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>StreamForge — IPTV Playout</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-<link rel="icon" type="image/png" href="/logo.png">
+<link rel="icon" id="app-favicon" type="image/png" href="">
 <link rel="stylesheet" href="/css/main.css">
 </head>
 <body>
 <div class="layout">
   <nav class="sidebar">
-    <div class="logo"><img src="/logo.png" class="logo-img" alt="StreamForge"></div>
+    <div class="logo"><img id="app-logo-img" src="" class="logo-img" alt="StreamForge"></div>
     <div class="nav">
       <div class="nav-item active" data-page="dashboard"><span class="nav-icon">📊</span><span>Dashboard</span></div>
       <div class="nav-sep">MEDIA</div>
@@ -295,6 +295,7 @@
             <div class="card-body">
               <div class="form-group"><label class="form-label">Base URL</label><input class="form-input" id="cfg-baseurl" type="text" placeholder="http://192.168.1.x:8080"><div class="form-hint">URL used in M3U and XMLTV output links</div></div>
               <div class="form-group"><label class="form-label">EPG Days Ahead</label><input class="form-input" id="cfg-days" type="number" min="1" max="30" style="width:100px"></div>
+              <div class="form-group"><label class="form-label">App Logo URL</label><input class="form-input" id="cfg-logo-url" type="url" placeholder="https://example.com/logo.png"><div class="form-hint">External image URL to use as the app logo. Leave blank to use the default.</div></div>
             </div>
           </div>
 
@@ -700,6 +701,35 @@
           </div>
         </div>
       </div>
+
+      <!-- Schedules Direct -->
+      <div class="card" style="margin-top:20px">
+        <div class="card-header"><span class="card-title">📡 Schedules Direct</span><span class="card-subtitle" style="font-size:12px;color:var(--text-muted);margin-left:8px">Automatic guide updates from schedulesdirect.org</span></div>
+        <div class="card-body">
+          <div class="two-col" style="gap:16px;align-items:end">
+            <div class="form-group" style="margin:0">
+              <label class="form-label">Username</label>
+              <input class="form-input" id="sd-username" type="text" placeholder="Schedules Direct username">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="form-label">Password</label>
+              <input class="form-input" id="sd-password" type="password" placeholder="Schedules Direct password">
+            </div>
+          </div>
+          <div id="sd-lineups-wrap" style="display:none;margin-top:14px">
+            <label class="form-label">Lineup</label>
+            <select class="form-input" id="sd-lineup" style="margin-bottom:10px"></select>
+          </div>
+          <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn btn-secondary" id="btn-sd-lineups">🔍 Fetch Lineups</button>
+            <button class="btn btn-primary" id="btn-sd-import" style="display:none">⬇ Import Guide</button>
+            <button class="btn btn-secondary" id="btn-sd-save" style="display:none">💾 Save &amp; Auto-Update</button>
+          </div>
+          <div id="sd-status" style="margin-top:10px;font-size:13px;color:var(--text-muted)"></div>
+          <div class="form-hint" style="margin-top:10px">Requires a paid <a href="https://schedulesdirect.org" target="_blank" style="color:var(--accent)">Schedules Direct</a> account (~$35/yr). Once saved, the guide auto-refreshes daily.</div>
+        </div>
+      </div>
+
       <div class="card" style="margin-top:20px">
         <div class="card-header"><span class="card-title">How It Works</span></div>
         <div class="card-body" style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
