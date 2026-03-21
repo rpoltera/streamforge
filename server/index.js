@@ -1501,9 +1501,10 @@ CRITICAL RULES:
 2. Use FUZZY matching — "Family Guy" in EPG matches "Family Guy" anywhere in library title.
 3. Shows marked ✓MATCH in the library are strong candidates — prioritise them.
 4. If a show has EPISODE DETAILS listed, use those specific IDs for suggestions.
-5. Suggest multiple episodes per show (S01E01, S01E02, etc.) to fill the schedule.
-6. ONLY suggest content that is a genuine title match. Do NOT suggest "thematically similar" or "related" content — if "American Dad" is in the EPG but not in the library, leave it in unmatchedSlots. Never substitute a different show.
-7. Do NOT say you cannot find something unless it truly has zero library candidates.
+5. Follow the EPG schedule exactly — match the exact number of occurrences per day. If the EPG has a show at 9pm and 11pm, schedule it at both slots. If once, once only.
+6. If a show has NO match in the library, assign a filler show from the library to replace it — and treat that filler show as if it IS that EPG show. Mirror the EPG schedule exactly: if the unmatched show appears 3 times in the EPG that day, the filler show appears 3 times in those same slots. If it appears once, the filler appears once.
+7. Use the same filler show consistently for the same unmatched slot across days.
+8. Do not repeat a filler show back to back in the queue.
 
 Return ONLY valid JSON, no markdown:
 {
