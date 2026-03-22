@@ -842,6 +842,10 @@
                 <label class="form-label">Add results to this StreamForge channel</label>
                 <select class="form-input" id="ai-target-channel"><option value="">— Select a channel —</option></select>
               </div>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+                <input type="checkbox" id="ai-all-channels" style="width:16px;height:16px">
+                <label for="ai-all-channels" style="cursor:pointer;font-size:13px;color:var(--text2)">Build schedule for <strong>all channels</strong> (matches each channel to its linked EPG)</label>
+              </div>
             </div>
           </div>
           <div class="card">
@@ -861,7 +865,16 @@
                 </div>
                 <div class="form-hint">Pick a stream, set a time and duration, then add it to your prompt so the AI schedules it.</div>
               </div>
-              <button class="btn btn-primary" id="btn-ai-build" style="width:100%">🤖 Build Schedule with AI</button>
+              <div style="display:flex;gap:8px">
+                <button class="btn btn-primary" id="btn-ai-build" style="flex:1">🤖 Build Schedule with AI</button>
+                <button class="btn btn-secondary" id="btn-ai-build-all" style="flex:1">🤖 Build All Channels</button>
+              </div>
+              <div id="ai-bulk-progress" style="display:none;margin-top:12px">
+                <div style="font-size:13px;color:var(--text2);margin-bottom:6px" id="ai-bulk-status">Building...</div>
+                <div style="background:var(--bg3);border-radius:4px;height:8px;overflow:hidden">
+                  <div id="ai-bulk-bar" style="height:100%;background:var(--accent);width:0%;transition:width .3s"></div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
