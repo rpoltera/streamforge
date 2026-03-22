@@ -868,12 +868,13 @@ app.get('/api/channels', (req, res) => {
 });
 
 app.post('/api/channels', (req, res) => {
-  const { name, num, group, logo } = req.body;
+  const { name, num, group, logo, epgChannelId } = req.body;
   if (!name) return res.status(400).json({ error: 'name required' });
   const maxNum = db.channels.length ? Math.max(...db.channels.map(c => c.num)) : 0;
   const ch = {
     id: uuidv4(), num: parseInt(num) || maxNum + 1,
     name, group: group || '', logo: logo || '',
+    epgChannelId: epgChannelId || '',
     playout: [], playoutStart: null,
     active: true, createdAt: new Date().toISOString(),
   };
@@ -890,7 +891,7 @@ app.get('/api/channels/:id', (req, res) => {
 app.put('/api/channels/:id', (req, res) => {
   const idx = db.channels.findIndex(c => c.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'not found' });
-  ['name','num','group','logo','active','playout','playoutStart'].forEach(k => {
+  ['name','num','group','logo','active','playout','playoutStart','epgChannelId'].forEach(k => {
     if (req.body[k] !== undefined) db.channels[idx][k] = req.body[k];
   });
   saveAll();
@@ -1881,6 +1882,31 @@ async function schedulesDirectRefresh() {
 // Run SD refresh on startup + every 24h
 schedulesDirectRefresh();
 setInterval(schedulesDirectRefresh, 24 * 60 * 60 * 1000);
+
+// Sync channel logos and epgChannelId from EPG data
+app.post('/api/channels/sync-logos', (req, res) => {
+  const epgChannels = db.epg.channels || [];
+  if (!epgChannels.length) return res.status(400).json({ error: 'No EPG imported' });
+
+  function norm(s){ return (s||'').toLowerCase().replace(/[^a-z0-9]/g,''); }
+  let synced = 0;
+  db.channels.forEach(ch => {
+    // Find best EPG match by epgChannelId first, then name
+    let epgCh = epgChannels.find(e => e.id === ch.epgChannelId);
+    if (!epgCh) {
+      const n = norm(ch.name);
+      epgCh = epgChannels.find(e => norm(e.name) === n) ||
+               epgChannels.find(e => norm(e.name).includes(n) || n.includes(norm(e.name)));
+    }
+    if (epgCh) {
+      if (epgCh.icon) ch.logo = epgCh.icon;
+      if (!ch.epgChannelId) ch.epgChannelId = epgCh.id;
+      synced++;
+    }
+  });
+  saveAll();
+  res.json({ synced, total: db.channels.length });
+});
 
 // ── Channel time blocks ───────────────────────────────────────────────────────
 app.get('/api/channels/:id/timeblocks', (req, res) => {
