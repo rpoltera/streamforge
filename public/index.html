@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+PE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -107,31 +107,6 @@
       <div id="channels-list"></div>
     </div>
 
-    <!-- Create from EPG Modal (outside page divs so it overlays correctly) -->
-    <div class="modal-overlay" id="modal-epg-channels">
-      <div class="modal" style="max-width:680px">
-        <div class="modal-header">
-          <span class="modal-title">Create Channels from EPG</span>
-          <button class="modal-close" onclick="closeModal('modal-epg-channels')">✕</button>
-        </div>
-        <div class="modal-body" style="padding:0">
-          <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <select class="filter-select" id="epg-ch-group" style="min-width:160px"><option value="">All Groups</option></select>
-            <div class="search-wrap" style="flex:1;min-width:160px"><span class="search-icon">🔍</span><input class="search-input" id="epg-ch-search" type="text" placeholder="Filter channels..."></div>
-            <button class="btn btn-secondary btn-sm" id="btn-epg-ch-all">Select All</button>
-            <button class="btn btn-secondary btn-sm" id="btn-epg-ch-none">None</button>
-          </div>
-          <div id="epg-ch-list" style="max-height:420px;overflow-y:auto"></div>
-        </div>
-        <div class="modal-footer" style="justify-content:space-between">
-          <span id="epg-ch-count" style="color:var(--text-muted);font-size:13px">0 selected</span>
-          <div style="display:flex;gap:8px">
-            <button class="btn btn-secondary" onclick="closeModal('modal-epg-channels')">Cancel</button>
-            <button class="btn btn-primary" id="btn-create-epg-channels">Create Selected Channels</button>
-          </div>
-        </div>
-      </div>
-    </div>
 
     <!-- PLAYOUT BUILDER -->
     <div class="page" id="page-playout">
@@ -730,64 +705,9 @@
       <div id="streams-list"></div>
 
       <!-- Time Block Modal -->
-      <div class="modal-overlay" id="modal-timeblock">
-        <div class="modal" style="max-width:480px">
-          <div class="modal-header"><span class="modal-title">Schedule Stream Block</span><button class="modal-close" onclick="closeModal('modal-timeblock')">✕</button></div>
-          <div class="modal-body">
-            <div class="form-group">
-              <label class="form-label">Stream</label>
-              <select class="form-input" id="tb-stream"></select>
-            </div>
-            <div class="two-col" style="gap:12px">
-              <div class="form-group">
-                <label class="form-label">Start Time</label>
-                <input class="form-input" id="tb-start" type="time" value="18:00">
-              </div>
-              <div class="form-group">
-                <label class="form-label">Duration (minutes)</label>
-                <input class="form-input" id="tb-duration" type="number" min="1" value="30">
-              </div>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Days</label>
-              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
-                <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="tb-day" value="0" checked> Sun</label>
-                <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="tb-day" value="1" checked> Mon</label>
-                <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="tb-day" value="2" checked> Tue</label>
-                <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="tb-day" value="3" checked> Wed</label>
-                <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="tb-day" value="4" checked> Thu</label>
-                <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="tb-day" value="5" checked> Fri</label>
-                <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="tb-day" value="6" checked> Sat</label>
-              </div>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Label (optional)</label>
-              <input class="form-input" id="tb-label" placeholder="e.g. Local News 6PM">
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closeModal('modal-timeblock')">Cancel</button>
-            <button class="btn btn-primary" id="btn-save-timeblock">Save Block</button>
-          </div>
-        </div>
-      </div>
-
+      
       <!-- Add/Edit Stream Modal -->
-      <div class="modal-overlay" id="modal-stream">
-        <div class="modal" style="max-width:500px">
-          <div class="modal-header"><span class="modal-title" id="stream-modal-title">Add Stream</span><button class="modal-close" onclick="closeModal('modal-stream')">✕</button></div>
-          <div class="modal-body">
-            <div class="form-group"><label class="form-label">Name</label><input class="form-input" id="stream-name" placeholder="e.g. ABC Local, HDHomeRun Ch5"></div>
-            <div class="form-group"><label class="form-label">Stream URL</label><input class="form-input" id="stream-url" placeholder="http://192.168.1.x:5004/auto/v5 or http://...m3u8"></div>
-            <div class="form-group"><label class="form-label">Group (optional)</label><input class="form-input" id="stream-group" placeholder="e.g. Local, IPTV, Sports"></div>
-            <div class="form-group"><label class="form-label">Logo URL (optional)</label><input class="form-input" id="stream-icon" placeholder="https://..."></div>
-          </div>
-          <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closeModal('modal-stream')">Cancel</button>
-            <button class="btn btn-primary" id="btn-save-stream">Save Stream</button>
-          </div>
-        </div>
-      </div>
+      
     </div>
 
     <!-- EPG IMPORT -->
@@ -965,6 +885,91 @@
       </div>
     </div>
   </main>
+
+<div class="modal-overlay" id="modal-timeblock">
+        <div class="modal" style="max-width:480px">
+          <div class="modal-header"><span class="modal-title">Schedule Stream Block</span><button class="modal-close" onclick="closeModal('modal-timeblock')">✕</button></div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label class="form-label">Stream</label>
+              <select class="form-input" id="tb-stream"></select>
+            </div>
+            <div class="two-col" style="gap:12px">
+              <div class="form-group">
+                <label class="form-label">Start Time</label>
+                <input class="form-input" id="tb-start" type="time" value="18:00">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Duration (minutes)</label>
+                <input class="form-input" id="tb-duration" type="number" min="1" value="30">
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Days</label>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+                <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="tb-day" value="0" checked> Sun</label>
+                <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="tb-day" value="1" checked> Mon</label>
+                <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="tb-day" value="2" checked> Tue</label>
+                <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="tb-day" value="3" checked> Wed</label>
+                <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="tb-day" value="4" checked> Thu</label>
+                <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="tb-day" value="5" checked> Fri</label>
+                <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="tb-day" value="6" checked> Sat</label>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Label (optional)</label>
+              <input class="form-input" id="tb-label" placeholder="e.g. Local News 6PM">
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal('modal-timeblock')">Cancel</button>
+            <button class="btn btn-primary" id="btn-save-timeblock">Save Block</button>
+          </div>
+        </div>
+      </div>
+
+<div class="modal-overlay" id="modal-stream">
+        <div class="modal" style="max-width:500px">
+          <div class="modal-header"><span class="modal-title" id="stream-modal-title">Add Stream</span><button class="modal-close" onclick="closeModal('modal-stream')">✕</button></div>
+          <div class="modal-body">
+            <div class="form-group"><label class="form-label">Name</label><input class="form-input" id="stream-name" placeholder="e.g. ABC Local, HDHomeRun Ch5"></div>
+            <div class="form-group"><label class="form-label">Stream URL</label><input class="form-input" id="stream-url" placeholder="http://192.168.1.x:5004/auto/v5 or http://...m3u8"></div>
+            <div class="form-group"><label class="form-label">Group (optional)</label><input class="form-input" id="stream-group" placeholder="e.g. Local, IPTV, Sports"></div>
+            <div class="form-group"><label class="form-label">Logo URL (optional)</label><input class="form-input" id="stream-icon" placeholder="https://..."></div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal('modal-stream')">Cancel</button>
+            <button class="btn btn-primary" id="btn-save-stream">Save Stream</button>
+          </div>
+        </div>
+      </div>
+
+<!-- Create from EPG Modal (outside page divs so it overlays correctly) -->
+    <div class="modal-overlay" id="modal-epg-channels">
+      <div class="modal" style="max-width:680px">
+        <div class="modal-header">
+          <span class="modal-title">Create Channels from EPG</span>
+          <button class="modal-close" onclick="closeModal('modal-epg-channels')">✕</button>
+        </div>
+        <div class="modal-body" style="padding:0">
+          <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <select class="filter-select" id="epg-ch-group" style="min-width:160px"><option value="">All Groups</option></select>
+            <div class="search-wrap" style="flex:1;min-width:160px"><span class="search-icon">🔍</span><input class="search-input" id="epg-ch-search" type="text" placeholder="Filter channels..."></div>
+            <button class="btn btn-secondary btn-sm" id="btn-epg-ch-all">Select All</button>
+            <button class="btn btn-secondary btn-sm" id="btn-epg-ch-none">None</button>
+          </div>
+          <div id="epg-ch-list" style="max-height:420px;overflow-y:auto"></div>
+        </div>
+        <div class="modal-footer" style="justify-content:space-between">
+          <span id="epg-ch-count" style="color:var(--text-muted);font-size:13px">0 selected</span>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-secondary" onclick="closeModal('modal-epg-channels')">Cancel</button>
+            <button class="btn btn-primary" id="btn-create-epg-channels">Create Selected Channels</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
 </div>
 
 <!-- MODAL: Add Library -->
