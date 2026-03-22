@@ -1994,36 +1994,47 @@ document.getElementById('btn-ai-build-all').addEventListener('click', async () =
   const statusEl = document.getElementById('ai-bulk-status');
   const barEl = document.getElementById('ai-bulk-bar');
 
-  // Get all channels that have an EPG channel linked (by name match)
   let channels = [];
   try { channels = await API.get('/api/channels'); } catch(e) { notify('Failed to load channels', true); return; }
+  if (!channels.length) { notify('No channels found', true); return; }
+
   const epg = await API.get('/api/epg');
-  const epgChannelIds = new Set((epg.channels||[]).map(c => c.id));
+  const epgChannels = epg.channels || [];
 
-  // Match SF channels to EPG channels by name
-  const epgByName = {};
-  (epg.channels||[]).forEach(c => { epgByName[c.name?.toLowerCase()] = c.id; });
+  // Fuzzy match: normalize and find best EPG channel for each SF channel
+  function norm(s){ return (s||'').toLowerCase().replace(/[^a-z0-9]/g,''); }
+  function bestEpgMatch(chName) {
+    const n = norm(chName);
+    // Exact match
+    let match = epgChannels.find(e => norm(e.name) === n);
+    if (match) return match.id;
+    // Contains match
+    match = epgChannels.find(e => norm(e.name).includes(n) || n.includes(norm(e.name)));
+    if (match) return match.id;
+    return null;
+  }
 
-  const channelsToProcess = channels.filter(ch => {
-    return epgByName[ch.name?.toLowerCase()] || ch.epgChannelId;
-  });
+  // Pair each channel with its best EPG match
+  const pairs = channels.map(ch => ({
+    ch,
+    epgId: ch.epgChannelId || bestEpgMatch(ch.name),
+  })).filter(p => p.epgId);
 
-  if (!channelsToProcess.length) {
-    notify('No channels matched to EPG channels. Make sure your channel names match EPG channel names.', true);
+  if (!pairs.length) {
+    notify('No channels could be matched to EPG channels by name. Make sure channel names match EPG channel names.', true);
     return;
   }
 
-  if (!confirm(`Build AI schedules for ${channelsToProcess.length} channel(s)? This may take several minutes.`)) return;
+  if (!confirm(`Build AI schedules for ${pairs.length} of ${channels.length} channel(s)? This may take several minutes.`)) return;
 
   btn.disabled = true;
   progressEl.style.display = '';
   let done = 0;
   const errors = [];
 
-  for (const ch of channelsToProcess) {
-    const epgId = ch.epgChannelId || epgByName[ch.name?.toLowerCase()];
-    statusEl.textContent = `Building ${ch.name}... (${done+1}/${channelsToProcess.length})`;
-    barEl.style.width = `${Math.round((done/channelsToProcess.length)*100)}%`;
+  for (const { ch, epgId } of pairs) {
+    statusEl.textContent = `Building "${ch.name}"... (${done+1}/${pairs.length})`;
+    barEl.style.width = `${Math.round((done/pairs.length)*100)}%`;
 
     try {
       const r = await API.post('/api/ai/build-schedule', {
