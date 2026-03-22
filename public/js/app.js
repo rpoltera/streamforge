@@ -617,31 +617,39 @@ let epgExistingNames = new Set();
 document.getElementById('btn-create-from-epg')?.addEventListener('click', async () => {
   try {
     const epg = await API.get('/api/epg');
-    epgChannelList = epg.channels || [];
-    if (!epgChannelList.length) { notify('No EPG imported yet. Go to EPG Import first.', true); return; }
+    epgChannelList = Array.isArray(epg?.channels) ? epg.channels : [];
+    if (!epgChannelList.length) { notify('No EPG imported yet — go to EPG Import first.', true); return; }
 
     // Get existing channel names to avoid duplicates
-    epgExistingNames = new Set((await API.get('/api/channels')).map(c => c.name.toLowerCase()));
+    try {
+      const chs = await API.get('/api/channels');
+      epgExistingNames = new Set((Array.isArray(chs) ? chs : []).map(c => (c.name||'').toLowerCase()));
+    } catch(_) { epgExistingNames = new Set(); }
 
     // Populate group dropdown
-    const groups = [...new Set(epgChannelList.map(c => c.group).filter(Boolean))].sort();
-    const groupSel = document.getElementById('epg-ch-group');
-    groupSel.innerHTML = '<option value="">All Groups</option>' +
-      groups.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('');
+    try {
+      const groups = [...new Set(epgChannelList.map(c => c.group||'').filter(Boolean))].sort();
+      const groupSel = document.getElementById('epg-ch-group');
+      if (groupSel) {
+        groupSel.innerHTML = '<option value="">All Groups (' + epgChannelList.length + ')</option>' +
+          groups.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('');
+      }
+    } catch(_) {}
 
     selectedEpgChannels = new Set();
     renderEpgChannelList();
     openModal('modal-epg-channels');
-  } catch(e) { notify('Error loading EPG: ' + e.message, true); }
+  } catch(e) { notify('Error: ' + e.message, true); console.error(e); }
 });
 
 function renderEpgChannelList() {
   const el = document.getElementById('epg-ch-list');
-  const filter = document.getElementById('epg-ch-search')?.value.toLowerCase() || '';
+  if (!el) return;
+  const filter = (document.getElementById('epg-ch-search')?.value || '').toLowerCase();
   const group = document.getElementById('epg-ch-group')?.value || '';
   const filtered = epgChannelList.filter(c => {
-    if (group && c.group !== group) return false;
-    if (filter && !(c.name||c.id).toLowerCase().includes(filter)) return false;
+    if (group && (c.group||'') !== group) return false;
+    if (filter && !(c.name||c.id||'').toLowerCase().includes(filter)) return false;
     return true;
   });
 
