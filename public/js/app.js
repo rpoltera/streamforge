@@ -1805,6 +1805,16 @@ document.getElementById('btn-epg-today').addEventListener('click', () => {
 
 // ── AI Scheduler ──────────────────────────────────────────────────────────────
 async function loadAiScheduler() {
+  // Populate stream select
+  try {
+    const streamSel = document.getElementById('ai-stream-select');
+    if (streamSel) {
+      if (!streams.length) await loadStreams();
+      streamSel.innerHTML = '<option value="">— Pick a stream —</option>' +
+        streams.map(s => `<option value="${s.id}">${esc(s.name)}${s.group?` (${esc(s.group)})`:''}` ).join('');
+    }
+  } catch(_) {}
+
   // Populate EPG channel dropdown
   try {
     const d = await API.get('/api/epg');
@@ -1835,6 +1845,19 @@ function goToAiScheduler(epgChannelId) {
     if (sel) sel.value = epgChannelId;
   }, 300);
 }
+
+document.getElementById('btn-ai-add-stream-hint')?.addEventListener('click', () => {
+  const streamId = document.getElementById('ai-stream-select').value;
+  const time = document.getElementById('ai-stream-time').value;
+  const dur = document.getElementById('ai-stream-dur').value || '30';
+  if (!streamId) { notify('Select a stream first', true); return; }
+  const stream = streams.find(s => s.id === streamId);
+  if (!stream) return;
+  const promptEl = document.getElementById('ai-prompt');
+  const line = `At ${time||'a specific time'}, play live stream "${stream.name}" for ${dur} minutes.`;
+  promptEl.value = (promptEl.value ? promptEl.value.trim() + '\n' : '') + line;
+  notify(`Added "${stream.name}" to prompt`);
+});
 
 document.getElementById('btn-ai-build').addEventListener('click', async () => {
   const channelId  = document.getElementById('ai-epg-channel').value;
@@ -1867,8 +1890,31 @@ document.getElementById('btn-ai-build').addEventListener('click', async () => {
     }
 
     // Render suggestions
-    html += aiSuggestions.map((s, i) => `
-      <div style="display:flex;align-items:center;gap:12px;padding:10px 18px;border-bottom:1px solid var(--border)">
+    html += aiSuggestions.map((s, i) => {
+      if (s.liveBlock) {
+        return `<div style="display:flex;align-items:center;gap:12px;padding:10px 18px;border-bottom:1px solid var(--border);opacity:.6">
+          <span style="font-family:'Space Mono',monospace;font-size:.7rem;color:var(--text3);min-width:24px">${i+1}</span>
+          <div style="width:36px;height:52px;background:var(--bg3);border-radius:3px;flex-shrink:0;display:flex;align-items:center;justify-content:center">🔴</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;color:var(--text);font-size:.88rem">${esc(s.title||'Live Block')}</div>
+            <div style="font-size:.78rem;color:var(--accent);margin-top:3px">Covered by scheduled live stream</div>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="aiSuggestions.splice(${i},1);renderAiResults()">✕</button>
+        </div>`;
+      }
+      if (s.streamId) {
+        return `<div style="display:flex;align-items:center;gap:12px;padding:10px 18px;border-bottom:1px solid var(--border);border-left:3px solid var(--accent)">
+          <span style="font-family:'Space Mono',monospace;font-size:.7rem;color:var(--text3);min-width:24px">${i+1}</span>
+          <div style="width:36px;height:52px;background:var(--bg3);border-radius:3px;flex-shrink:0;display:flex;align-items:center;justify-content:center">📡</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;color:var(--text);font-size:.88rem">📡 ${esc(s.title||s.stream?.name||'Live Stream')}</div>
+            <div style="font-size:.76rem;color:var(--text3);margin-top:2px">${s.duration ? fmtDur(s.duration*60) : ''}</div>
+            <div style="font-size:.78rem;color:var(--accent3);margin-top:3px;font-style:italic">${esc(s.reason||'')}</div>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="aiSuggestions.splice(${i},1);renderAiResults()">✕</button>
+        </div>`;
+      }
+      return `<div style="display:flex;align-items:center;gap:12px;padding:10px 18px;border-bottom:1px solid var(--border)">
         <span style="font-family:'Space Mono',monospace;font-size:.7rem;color:var(--text3);min-width:24px">${i+1}</span>
         ${s.item?.thumb ? `<img src="${esc(s.item.thumb)}" style="width:36px;height:52px;object-fit:cover;border-radius:3px;flex-shrink:0" onerror="this.style.display='none'" alt="">` : '<div style="width:36px;height:52px;background:var(--bg3);border-radius:3px;flex-shrink:0;display:flex;align-items:center;justify-content:center">📺</div>'}
         <div style="flex:1;min-width:0">
@@ -1877,7 +1923,8 @@ document.getElementById('btn-ai-build').addEventListener('click', async () => {
           <div style="font-size:.78rem;color:var(--accent3);margin-top:3px;font-style:italic">${esc(s.reason||'')}</div>
         </div>
         <button class="btn btn-secondary btn-sm" onclick="aiSuggestions.splice(${i},1);renderAiResults()">✕</button>
-      </div>`).join('');
+      </div>`;
+    }).join('');
 
     resultsEl.innerHTML = html || '<div style="padding:20px;color:var(--text3)">No matches found</div>';
 
@@ -1913,14 +1960,41 @@ document.getElementById('btn-ai-apply').addEventListener('click', async () => {
   if (!aiSuggestions.length) { notify('No suggestions to add', true); return; }
 
   try {
-    // Load current playout and append
-    const current = await API.get(`/api/channels/${targetCh}/playout`);
-    const newPlayout = [
-      ...current.map(b => ({ mediaId: b.mediaId })),
-      ...aiSuggestions.map(s => ({ mediaId: s.mediaId })),
-    ];
-    await API.put(`/api/channels/${targetCh}/playout`, { playout: newPlayout });
-    notify(`✅ Added ${aiSuggestions.length} items to channel playout`);
+    // Separate media items from stream/liveBlock suggestions
+    const mediaSuggestions = aiSuggestions.filter(s => s.mediaId && !s.liveBlock && !s.streamId);
+    const streamSuggestions = aiSuggestions.filter(s => s.streamId && s.startTime);
+
+    // Add media items to playout queue
+    if (mediaSuggestions.length) {
+      const current = await API.get(`/api/channels/${targetCh}/playout`);
+      const newPlayout = [
+        ...current.map(b => b.streamId ? { streamId: b.streamId, duration: b.duration } : { mediaId: b.mediaId }),
+        ...mediaSuggestions.map(s => ({ mediaId: s.mediaId })),
+      ];
+      await API.put(`/api/channels/${targetCh}/playout`, { playout: newPlayout });
+    }
+
+    // Add stream time blocks
+    if (streamSuggestions.length) {
+      const current = await API.get(`/api/channels/${targetCh}/timeblocks`);
+      const newBlocks = [...current];
+      streamSuggestions.forEach(s => {
+        if (!newBlocks.find(b => b.streamId === s.streamId && b.startTime === s.startTime)) {
+          newBlocks.push({
+            id: Date.now().toString() + Math.random(),
+            streamId: s.streamId,
+            startTime: s.startTime,
+            duration: s.duration || 60,
+            days: [0,1,2,3,4,5,6],
+            label: s.title || '',
+          });
+        }
+      });
+      await API.put(`/api/channels/${targetCh}/timeblocks`, { timeBlocks: newBlocks });
+    }
+
+    const total = mediaSuggestions.length + streamSuggestions.length;
+    notify(`✅ Added ${total} items to channel`);
     document.getElementById('ai-add-bar').style.display = 'none';
   } catch(e) { notify('Failed to apply: ' + e.message, true); }
 });
