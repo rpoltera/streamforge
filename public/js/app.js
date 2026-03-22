@@ -1,4 +1,98 @@
 'use strict';
+// ── License ───────────────────────────────────────────────────────────────────
+(async function initLicense() {
+  const overlay = document.getElementById('license-overlay');
+  const trialView = document.getElementById('lic-trial-view');
+  const expiredView = document.getElementById('lic-expired-view');
+  const banner = document.getElementById('lic-trial-banner');
+
+  async function checkLicense() {
+    try {
+      const r = await fetch('/api/license');
+      const lic = await r.json();
+
+      if (lic.status === 'licensed') {
+        overlay.style.display = 'none';
+        return;
+      }
+
+      if (lic.status === 'trial') {
+        overlay.style.display = 'none';
+        // Show dismissible trial banner at top
+        const existing = document.getElementById('sf-trial-ribbon');
+        if (!existing) {
+          const ribbon = document.createElement('div');
+          ribbon.id = 'sf-trial-ribbon';
+          ribbon.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:1000;background:linear-gradient(90deg,#0a2a1a,#0d3d24);border-bottom:1px solid var(--accent);padding:6px 16px;display:flex;align-items:center;justify-content:center;gap:12px;font-size:12px;color:var(--text2)';
+          ribbon.innerHTML = `<span>⏱ Trial: <strong style="color:var(--accent)">${lic.daysLeft} day${lic.daysLeft!==1?'s':''} remaining</strong></span><span>·</span><a href="https://github.com/rpoltera/streamforge" target="_blank" style="color:var(--accent)">Purchase license ($25/yr or $110 lifetime)</a><button onclick="this.parentElement.remove()" style="margin-left:8px;background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;line-height:1">✕</button>`;
+          document.body.prepend(ribbon);
+        }
+        return;
+      }
+
+      if (lic.status === 'expired') {
+        overlay.style.display = 'flex';
+        trialView.style.display = 'none';
+        expiredView.style.display = '';
+        return;
+      }
+
+      // First time — show trial offer
+      overlay.style.display = 'flex';
+      trialView.style.display = '';
+      expiredView.style.display = 'none';
+
+    } catch(e) {
+      console.warn('License check failed:', e.message);
+    }
+  }
+
+  // Start trial button
+  document.getElementById('lic-btn-trial')?.addEventListener('click', async () => {
+    await fetch('/api/license/start-trial', { method: 'POST' });
+    overlay.style.display = 'none';
+    checkLicense();
+  });
+
+  // Activate buttons
+  async function activate(inputId, errorId) {
+    const key = document.getElementById(inputId)?.value.trim();
+    const errEl = document.getElementById(errorId);
+    if (!key) { errEl.textContent = 'Enter a license key'; errEl.style.display = ''; return; }
+    try {
+      const r = await fetch('/api/license/activate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key }),
+      });
+      const d = await r.json();
+      if (!r.ok) { errEl.textContent = d.error || 'Invalid key'; errEl.style.display = ''; return; }
+      errEl.style.display = 'none';
+      overlay.style.display = 'none';
+      const ribbon = document.getElementById('sf-trial-ribbon');
+      if (ribbon) ribbon.remove();
+      // Show success
+      const msg = document.createElement('div');
+      msg.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:9998;background:var(--success);color:#000;padding:10px 24px;border-radius:8px;font-weight:600;font-size:14px';
+      msg.textContent = `✅ ${d.type === 'lifetime' ? 'Lifetime' : 'Annual'} license activated!`;
+      document.body.appendChild(msg);
+      setTimeout(() => msg.remove(), 4000);
+    } catch(e) {
+      errEl.textContent = 'Activation failed: ' + e.message;
+      errEl.style.display = '';
+    }
+  }
+
+  document.getElementById('lic-btn-activate')?.addEventListener('click', () => activate('lic-key-input', 'lic-error'));
+  document.getElementById('lic-btn-activate-exp')?.addEventListener('click', () => activate('lic-key-input-exp', 'lic-error-exp'));
+
+  // Enter key on input
+  document.getElementById('lic-key-input')?.addEventListener('keydown', e => { if(e.key==='Enter') activate('lic-key-input','lic-error'); });
+  document.getElementById('lic-key-input-exp')?.addEventListener('keydown', e => { if(e.key==='Enter') activate('lic-key-input-exp','lic-error-exp'); });
+
+  checkLicense();
+})();
+
 const API={
   async get(p){const r=await fetch(p);if(!r.ok)throw new Error(await r.text());return r.json()},
   async post(p,b){const r=await fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});return r.json()},
