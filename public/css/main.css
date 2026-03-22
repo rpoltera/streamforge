@@ -243,3 +243,4 @@
 .ai-prov-name{font-weight:700;color:var(--text);font-size:.82rem;margin-bottom:2px}
 .ai-prov-sub{font-size:.7rem;color:var(--text3);line-height:1.3}
 @media(max-width:900px){.ai-provider-grid{grid-template-columns:repeat(3,1fr)}}
+.modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}.modal-body{margin-bottom:16px}.modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
