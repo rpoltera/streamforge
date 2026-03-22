@@ -15,41 +15,15 @@ const fsp         = require('fs').promises;
 const { spawn, execSync } = require('child_process');
 const crypto      = require('crypto');
 
-// ── License ───────────────────────────────────────────────────────────────────
-const LICENSE_SECRET  = 'SF_LICENSE_SECRET_2024_STREAMFORGE';
-const TRIAL_DAYS      = 7;
-const LICENSE_FILE    = path.join(process.env.SF_DATA || path.join(__dirname, '../data'), 'config', 'license.json');
-
-// Known valid keys (server-side validation)
-// Format: HMAC-SHA256(SECRET, "type:seed") first 16 hex chars → formatted as SF-XXXX-XXXX-XXXX-XXXX
-function validateLicenseKey(key) {
-  if (!key || typeof key !== 'string') return null;
-  const k = key.trim().toUpperCase();
-
-  // Test lifetime key
-  const testSig = crypto.createHmac('sha256', LICENSE_SECRET).update('lifetime:test-2024').digest('hex').toUpperCase();
-  const testKey = 'SF-' + testSig.slice(0,4) + '-' + testSig.slice(4,8) + '-' + testSig.slice(8,12) + '-' + testSig.slice(12,16);
-  if (k === testKey) return { type: 'lifetime', valid: true };
-
-  // Validate annual keys: SF-YEAR-XXXX-XXXX-XXXX (seed = "annual:XXXX")
-  // Validate lifetime keys: SF-LIFE-XXXX-XXXX-XXXX (seed = "lifetime:XXXX")
-  const parts = k.split('-');
-  if (parts.length !== 5 || parts[0] !== 'SF') return null;
-
-  const type = parts[1] === 'LIFE' ? 'lifetime' : parts[1].match(/^\d{4}$/) ? 'annual' : null;
-  if (!type) return null;
-
-  const seed = `${type}:${parts[2]}${parts[3]}`;
-  const expectedSig = crypto.createHmac('sha256', LICENSE_SECRET).update(seed).digest('hex').toUpperCase();
-  const expectedKey = `SF-${type === 'lifetime' ? 'LIFE' : parts[1]}-${parts[2]}-${parts[3]}-${expectedSig.slice(0,4)}`;
-
-  if (k === expectedKey) {
-    const year = type === 'annual' ? parseInt(parts[1]) : null;
-    if (type === 'annual' && year < new Date().getFullYear()) return null; // expired annual
-    return { type, valid: true, year };
-  }
-  return null;
-}
+// ── License (Lemon Squeezy) ───────────────────────────────────────────────────
+const TRIAL_DAYS     = 7;
+const LICENSE_FILE   = path.join(process.env.SF_DATA || path.join(__dirname, '../data'), 'config', 'license.json');
+const LS_API         = 'https://api.lemonsqueezy.com/v1';
+const LS_ANNUAL_ID   = '912702';
+const LS_LIFETIME_ID = '912714';
+const LS_STORE_SLUG  = 'streamforge-iptv';
+// Annual checkout:  https://streamforge-iptv.lemonsqueezy.com/buy/VARIANT_ID
+// Lifetime checkout: https://streamforge-iptv.lemonsqueezy.com/buy/VARIANT_ID
 
 function loadLicense() {
   try {
@@ -65,15 +39,35 @@ function saveLicense(data) {
   } catch(_) {}
 }
 
+async function validateWithLS(licenseKey) {
+  const lsApiKey = config.lsApiKey || '';
+  if (!lsApiKey) return null;
+  try {
+    const r = await fetch(`${LS_API}/licenses/validate`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${lsApiKey}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ license_key: licenseKey }),
+    });
+    const d = await r.json();
+    if (!d.valid) return null;
+    const productId = String(d.meta?.product_id || '');
+    const type = productId === LS_LIFETIME_ID ? 'lifetime' : productId === LS_ANNUAL_ID ? 'annual' : 'unknown';
+    return { type, valid: true, data: d };
+  } catch(e) {
+    console.error('[license] LS validate error:', e.message);
+    return null;
+  }
+}
+
 function getLicenseStatus() {
   const lic = loadLicense();
   if (!lic.installedAt) { lic.installedAt = new Date().toISOString(); saveLicense(lic); }
 
-  // Valid license
-  if (lic.key) {
-    const valid = validateLicenseKey(lic.key);
-    if (valid) return { status: 'licensed', type: valid.type, key: lic.key };
-    // Key invalid — fall through to trial check
+  // Valid cached license
+  if (lic.key && lic.type && lic.validatedAt) {
+    // Re-validate max once per 24h
+    const age = Date.now() - new Date(lic.validatedAt).getTime();
+    if (age < 24 * 60 * 60 * 1000) return { status: 'licensed', type: lic.type, key: lic.key };
   }
 
   // Trial check
@@ -82,6 +76,7 @@ function getLicenseStatus() {
   const now       = Date.now();
   const daysLeft  = Math.max(0, Math.ceil((trialEnd - now) / (24 * 60 * 60 * 1000)));
 
+  if (lic.key && lic.type) return { status: 'licensed', type: lic.type, key: lic.key };
   if (now < trialEnd) return { status: 'trial', daysLeft, trialEnd: new Date(trialEnd).toISOString() };
   return { status: 'expired', daysLeft: 0 };
 }
@@ -270,14 +265,16 @@ app.use(express.static(path.join(__dirname, '../public')));
 // ── License routes ────────────────────────────────────────────────────────────
 app.get('/api/license', (req, res) => res.json(getLicenseStatus()));
 
-app.post('/api/license/activate', (req, res) => {
+app.post('/api/license/activate', async (req, res) => {
   const { key } = req.body;
-  const valid = validateLicenseKey(key);
-  if (!valid) return res.status(400).json({ error: 'Invalid license key' });
+  if (!key) return res.status(400).json({ error: 'License key required' });
+  const valid = await validateWithLS(key);
+  if (!valid) return res.status(400).json({ error: 'Invalid license key. Please check your key and try again.' });
   const lic = loadLicense();
-  lic.key = key.trim().toUpperCase();
+  lic.key = key.trim();
   lic.type = valid.type;
   lic.activatedAt = new Date().toISOString();
+  lic.validatedAt = new Date().toISOString();
   saveLicense(lic);
   res.json({ ok: true, type: valid.type });
 });
@@ -811,6 +808,7 @@ app.put('/api/config', (req, res) => {
     'customAiUrl','customAiKey','customAiModel',
     'logoUrl',
     'sdUsername','sdPassword','sdLineupId','sdAutoUpdate',
+    'lsApiKey',
   ].forEach(k => {
     if (req.body[k] !== undefined) config[k] = req.body[k];
   });
