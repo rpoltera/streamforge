@@ -13,8 +13,81 @@ const path        = require('path');
 const fs          = require('fs');
 const fsp         = require('fs').promises;
 const { spawn, execSync } = require('child_process');
+const crypto      = require('crypto');
 
-// ── Config ────────────────────────────────────────────────────────────────────
+// ── License ───────────────────────────────────────────────────────────────────
+const LICENSE_SECRET  = 'SF_LICENSE_SECRET_2024_STREAMFORGE';
+const TRIAL_DAYS      = 7;
+const LICENSE_FILE    = path.join(process.env.SF_DATA || path.join(__dirname, '../data'), 'config', 'license.json');
+
+// Known valid keys (server-side validation)
+// Format: HMAC-SHA256(SECRET, "type:seed") first 16 hex chars → formatted as SF-XXXX-XXXX-XXXX-XXXX
+function validateLicenseKey(key) {
+  if (!key || typeof key !== 'string') return null;
+  const k = key.trim().toUpperCase();
+
+  // Test lifetime key
+  const testSig = crypto.createHmac('sha256', LICENSE_SECRET).update('lifetime:test-2024').digest('hex').toUpperCase();
+  const testKey = 'SF-' + testSig.slice(0,4) + '-' + testSig.slice(4,8) + '-' + testSig.slice(8,12) + '-' + testSig.slice(12,16);
+  if (k === testKey) return { type: 'lifetime', valid: true };
+
+  // Validate annual keys: SF-YEAR-XXXX-XXXX-XXXX (seed = "annual:XXXX")
+  // Validate lifetime keys: SF-LIFE-XXXX-XXXX-XXXX (seed = "lifetime:XXXX")
+  const parts = k.split('-');
+  if (parts.length !== 5 || parts[0] !== 'SF') return null;
+
+  const type = parts[1] === 'LIFE' ? 'lifetime' : parts[1].match(/^\d{4}$/) ? 'annual' : null;
+  if (!type) return null;
+
+  const seed = `${type}:${parts[2]}${parts[3]}`;
+  const expectedSig = crypto.createHmac('sha256', LICENSE_SECRET).update(seed).digest('hex').toUpperCase();
+  const expectedKey = `SF-${type === 'lifetime' ? 'LIFE' : parts[1]}-${parts[2]}-${parts[3]}-${expectedSig.slice(0,4)}`;
+
+  if (k === expectedKey) {
+    const year = type === 'annual' ? parseInt(parts[1]) : null;
+    if (type === 'annual' && year < new Date().getFullYear()) return null; // expired annual
+    return { type, valid: true, year };
+  }
+  return null;
+}
+
+function loadLicense() {
+  try {
+    if (fs.existsSync(LICENSE_FILE)) return JSON.parse(fs.readFileSync(LICENSE_FILE, 'utf8'));
+  } catch(_) {}
+  return { installedAt: new Date().toISOString(), key: null, type: null };
+}
+
+function saveLicense(data) {
+  try {
+    fs.mkdirSync(path.dirname(LICENSE_FILE), { recursive: true });
+    fs.writeFileSync(LICENSE_FILE, JSON.stringify(data, null, 2));
+  } catch(_) {}
+}
+
+function getLicenseStatus() {
+  const lic = loadLicense();
+  if (!lic.installedAt) { lic.installedAt = new Date().toISOString(); saveLicense(lic); }
+
+  // Valid license
+  if (lic.key) {
+    const valid = validateLicenseKey(lic.key);
+    if (valid) return { status: 'licensed', type: valid.type, key: lic.key };
+    // Key invalid — fall through to trial check
+  }
+
+  // Trial check
+  const installed = new Date(lic.installedAt).getTime();
+  const trialEnd  = installed + TRIAL_DAYS * 24 * 60 * 60 * 1000;
+  const now       = Date.now();
+  const daysLeft  = Math.max(0, Math.ceil((trialEnd - now) / (24 * 60 * 60 * 1000)));
+
+  if (now < trialEnd) return { status: 'trial', daysLeft, trialEnd: new Date(trialEnd).toISOString() };
+  return { status: 'expired', daysLeft: 0 };
+}
+
+// License API routes
+
 const CONFIG_PATH = process.env.SF_CONFIG || path.join(__dirname, '../data/config/config.json');
 const DATA_DIR    = process.env.SF_DATA   || path.join(__dirname, '../data');
 const LOG_DIR     = process.env.SF_LOG    || DATA_DIR;
@@ -193,6 +266,28 @@ try {
   }));
 } catch (_) { app.use(morgan('dev')); }
 app.use(express.static(path.join(__dirname, '../public')));
+
+// ── License routes ────────────────────────────────────────────────────────────
+app.get('/api/license', (req, res) => res.json(getLicenseStatus()));
+
+app.post('/api/license/activate', (req, res) => {
+  const { key } = req.body;
+  const valid = validateLicenseKey(key);
+  if (!valid) return res.status(400).json({ error: 'Invalid license key' });
+  const lic = loadLicense();
+  lic.key = key.trim().toUpperCase();
+  lic.type = valid.type;
+  lic.activatedAt = new Date().toISOString();
+  saveLicense(lic);
+  res.json({ ok: true, type: valid.type });
+});
+
+app.post('/api/license/start-trial', (req, res) => {
+  const lic = loadLicense();
+  if (!lic.installedAt) lic.installedAt = new Date().toISOString();
+  saveLicense(lic);
+  res.json(getLicenseStatus());
+});
 const upload = multer({ dest: UPLOADS_DIR, limits: { fileSize: 500 * 1024 * 1024 } });
 const uploadEpg = multer({ dest: UPLOADS_DIR, limits: { fileSize: 100 * 1024 * 1024 } }); // 100MB for large EPG files
 
