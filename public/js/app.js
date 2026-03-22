@@ -614,6 +614,14 @@ let epgChannelList = [];
 let selectedEpgChannels = new Set();
 let epgExistingNames = new Set();
 
+document.getElementById('btn-sync-logos')?.addEventListener('click', async () => {
+  try {
+    const r = await API.post('/api/channels/sync-logos', {});
+    notify(`✅ Synced logos for ${r.synced} of ${r.total} channels`);
+    loadChannels();
+  } catch(e) { notify('Sync failed: ' + e.message, true); }
+});
+
 document.getElementById('btn-create-from-epg')?.addEventListener('click', async () => {
   try {
     const epg = await API.get('/api/epg');
@@ -721,8 +729,9 @@ document.getElementById('btn-create-epg-channels')?.addEventListener('click', as
       await API.post('/api/channels', {
         name: epgCh.name || epgCh.id,
         num: num++,
-        group: '',
+        group: epgCh.group || '',
         logo: epgCh.icon || '',
+        epgChannelId: epgCh.id,
         active: true,
       });
       created++;
