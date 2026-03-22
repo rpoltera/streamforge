@@ -609,6 +609,103 @@ document.getElementById('media-search').addEventListener('input', ()=>loadMedia(
 document.getElementById('media-lib-filter').addEventListener('change', ()=>loadMedia(1));
 document.getElementById('media-type-filter').addEventListener('change', ()=>loadMedia(1));
 
+// ── Create Channels from EPG ──────────────────────────────────────────────────
+let epgChannelList = [];
+let selectedEpgChannels = new Set();
+
+document.getElementById('btn-create-from-epg')?.addEventListener('click', async () => {
+  try {
+    const epg = await API.get('/api/epg');
+    epgChannelList = epg.channels || [];
+    if (!epgChannelList.length) { notify('No EPG imported yet. Go to EPG Import first.', true); return; }
+
+    // Get existing channel names to avoid duplicates
+    const existingNames = new Set((await API.get('/api/channels')).map(c => c.name.toLowerCase()));
+
+    selectedEpgChannels = new Set();
+    renderEpgChannelList(epgChannelList, existingNames);
+    openModal('modal-epg-channels');
+  } catch(e) { notify('Error loading EPG: ' + e.message, true); }
+});
+
+function renderEpgChannelList(channels, existingNames) {
+  const el = document.getElementById('epg-ch-list');
+  const filter = document.getElementById('epg-ch-search')?.value.toLowerCase() || '';
+  const filtered = channels.filter(c => !filter || (c.name||c.id).toLowerCase().includes(filter));
+
+  el.innerHTML = filtered.map(c => {
+    const name = c.name || c.id;
+    const exists = existingNames?.has(name.toLowerCase());
+    const checked = selectedEpgChannels.has(c.id);
+    return `<label style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);cursor:pointer;${exists?'opacity:.5':''}">
+      <input type="checkbox" value="${esc(c.id)}" ${checked?'checked':''} ${exists?'disabled':''} onchange="toggleEpgChannel('${esc(c.id)}',this.checked)" style="width:16px;height:16px;flex-shrink:0">
+      ${c.icon ? `<img src="${esc(c.icon)}" style="width:32px;height:32px;object-fit:contain;border-radius:4px;flex-shrink:0" onerror="this.style.display='none'">` : '<div style="width:32px;height:32px;background:var(--bg3);border-radius:4px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px">📺</div>'}
+      <div style="flex:1">
+        <div style="font-weight:600">${esc(name)}</div>
+        <div style="font-size:12px;color:var(--text-muted)">${esc(c.id)}${exists?' · Already exists':''}</div>
+      </div>
+    </label>`;
+  }).join('');
+  updateEpgCount();
+}
+
+window.toggleEpgChannel = (id, checked) => {
+  if (checked) selectedEpgChannels.add(id);
+  else selectedEpgChannels.delete(id);
+  updateEpgCount();
+};
+
+function updateEpgCount() {
+  const el = document.getElementById('epg-ch-count');
+  if (el) el.textContent = `${selectedEpgChannels.size} selected`;
+}
+
+document.getElementById('epg-ch-search')?.addEventListener('input', () => renderEpgChannelList(epgChannelList));
+
+document.getElementById('btn-epg-ch-all')?.addEventListener('click', () => {
+  epgChannelList.forEach(c => selectedEpgChannels.add(c.id));
+  renderEpgChannelList(epgChannelList);
+});
+
+document.getElementById('btn-epg-ch-none')?.addEventListener('click', () => {
+  selectedEpgChannels.clear();
+  renderEpgChannelList(epgChannelList);
+});
+
+document.getElementById('btn-create-epg-channels')?.addEventListener('click', async () => {
+  if (!selectedEpgChannels.size) { notify('Select at least one channel', true); return; }
+  const btn = document.getElementById('btn-create-epg-channels');
+  btn.disabled = true; btn.textContent = 'Creating...';
+
+  try {
+    const existing = await API.get('/api/channels');
+    const nextNum = (existing.reduce((max, c) => Math.max(max, c.num||0), 0)) + 1;
+    let created = 0;
+    let num = nextNum;
+
+    for (const epgCh of epgChannelList) {
+      if (!selectedEpgChannels.has(epgCh.id)) continue;
+      await API.post('/api/channels', {
+        name: epgCh.name || epgCh.id,
+        num: num++,
+        group: '',
+        logo: epgCh.icon || '',
+        active: true,
+      });
+      created++;
+    }
+
+    closeModal('modal-epg-channels');
+    await loadChannels();
+    notify(`✅ Created ${created} channel${created !== 1 ? 's' : ''}`);
+  } catch(e) {
+    notify('Error creating channels: ' + e.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Create Selected Channels';
+  }
+});
+
 // ── Channels ──────────────────────────────────────────────────────────────────
 let editingChId=null;
 async function loadChannels(){
