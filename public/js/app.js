@@ -784,6 +784,73 @@ document.getElementById('btn-add-stream-block')?.addEventListener('click', () =>
   notify(`Added ${stream.name} (${mins}min) to queue`);
 });
 
+// ── Time Blocks ───────────────────────────────────────────────────────────────
+let timeBlocks = [];
+const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+async function loadTimeBlocks(channelId) {
+  if (!channelId) return;
+  timeBlocks = await API.get(`/api/channels/${channelId}/timeblocks`);
+  renderTimeBlocks();
+}
+
+function renderTimeBlocks() {
+  const el = document.getElementById('timeblocks-list');
+  if (!el) return;
+  if (!timeBlocks.length) {
+    el.innerHTML = '<div style="padding:12px 16px;color:var(--text-muted);font-size:13px">No scheduled blocks. Add one to override the loop at specific times.</div>';
+    return;
+  }
+  el.innerHTML = timeBlocks.map((tb, i) => {
+    const stream = streams.find(s => s.id === tb.streamId);
+    const days = (tb.days||[0,1,2,3,4,5,6]).map(d=>DAYS[d]).join(', ');
+    const endMins = (() => { const [h,m]=(tb.startTime||'00:00').split(':').map(Number); const e=h*60+m+(tb.duration||60); return `${String(Math.floor(e/60)).padStart(2,'0')}:${String(e%60).padStart(2,'0')}`; })();
+    return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border)">
+      <div style="flex:1">
+        <div style="font-weight:600">${esc(tb.label||stream?.name||'Stream Block')}</div>
+        <div style="font-size:12px;color:var(--text-muted)">${tb.startTime} – ${endMins} · ${days}</div>
+        <div style="font-size:12px;color:var(--accent)">📡 ${esc(stream?.name||'Unknown stream')}</div>
+      </div>
+      <button class="btn btn-sm btn-danger" onclick="removeTimeBlock(${i})">🗑</button>
+    </div>`;
+  }).join('');
+}
+
+async function saveTimeBlocks() {
+  if (!currentPlayoutChannelId) return;
+  await API.put(`/api/channels/${currentPlayoutChannelId}/timeblocks`, { timeBlocks });
+}
+
+window.removeTimeBlock = async (i) => {
+  timeBlocks.splice(i, 1);
+  renderTimeBlocks();
+  await saveTimeBlocks();
+  notify('Block removed');
+};
+
+document.getElementById('btn-add-timeblock')?.addEventListener('click', () => {
+  // Populate stream select
+  const sel = document.getElementById('tb-stream');
+  sel.innerHTML = streams.map(s => `<option value="${s.id}">${esc(s.name)}${s.group?` (${esc(s.group)})`:''}` ).join('');
+  openModal('modal-timeblock');
+});
+
+document.getElementById('btn-save-timeblock')?.addEventListener('click', async () => {
+  const streamId = document.getElementById('tb-stream').value;
+  const startTime = document.getElementById('tb-start').value;
+  const duration = parseInt(document.getElementById('tb-duration').value) || 30;
+  const label = document.getElementById('tb-label').value.trim();
+  const days = [...document.querySelectorAll('.tb-day:checked')].map(c => parseInt(c.value));
+  if (!streamId) { notify('Select a stream', true); return; }
+  if (!days.length) { notify('Select at least one day', true); return; }
+  timeBlocks.push({ id: Date.now().toString(), streamId, startTime, duration, days, label });
+  timeBlocks.sort((a,b) => a.startTime.localeCompare(b.startTime));
+  renderTimeBlocks();
+  await saveTimeBlocks();
+  closeModal('modal-timeblock');
+  notify('Time block added');
+});
+
 // ── Playout Builder ───────────────────────────────────────────────────────────
 let playoutQueue=[];
 let currentPlayoutChannelId=null;
@@ -823,6 +890,7 @@ async function loadPlayoutForChannel(id){
     }
     renderPlayoutQueue();
     loadPickerMedia(1);
+    loadTimeBlocks(id);
   }catch(e){notify('Error loading playout: '+e.message,true)}
 }
 
