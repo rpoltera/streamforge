@@ -477,6 +477,38 @@ function resolveStreamSource(item) {
 
 // Returns { item, offsetSeconds, startTime, endTime } for what should be playing NOW
 function getPlayoutNow(channel, nowMs) {
+  // ── Check scheduled time blocks first (they override the loop) ──────────────
+  const blocks = channel.timeBlocks || [];
+  if (blocks.length) {
+    const now = new Date(nowMs);
+    const dayOfWeek = now.getDay(); // 0=Sun,6=Sat
+    const todayMins = now.getHours() * 60 + now.getMinutes();
+    for (const tb of blocks) {
+      // Check day match
+      const days = tb.days || [0,1,2,3,4,5,6];
+      if (!days.includes(dayOfWeek)) continue;
+      // Parse start time "HH:MM"
+      const [sh, sm] = (tb.startTime || '00:00').split(':').map(Number);
+      const startMins = sh * 60 + sm;
+      const endMins = startMins + (tb.duration || 60);
+      if (todayMins >= startMins && todayMins < endMins) {
+        const stream = db.streams.find(s => s.id === tb.streamId);
+        if (stream) {
+          const midnight = new Date(now).setHours(0,0,0,0);
+          return {
+            item: null,
+            stream,
+            block: tb,
+            offsetSeconds: 0,
+            startTime: midnight + startMins * 60000,
+            endTime: midnight + endMins * 60000,
+            isLive: true,
+          };
+        }
+      }
+    }
+  }
+
   const playout = channel.playout || [];
   if (!playout.length) return null;
 
@@ -1806,6 +1838,21 @@ async function schedulesDirectRefresh() {
 // Run SD refresh on startup + every 24h
 schedulesDirectRefresh();
 setInterval(schedulesDirectRefresh, 24 * 60 * 60 * 1000);
+
+// ── Channel time blocks ───────────────────────────────────────────────────────
+app.get('/api/channels/:id/timeblocks', (req, res) => {
+  const ch = db.channels.find(c => c.id === req.params.id);
+  if (!ch) return res.status(404).json({ error: 'not found' });
+  res.json(ch.timeBlocks || []);
+});
+
+app.put('/api/channels/:id/timeblocks', (req, res) => {
+  const ch = db.channels.find(c => c.id === req.params.id);
+  if (!ch) return res.status(404).json({ error: 'not found' });
+  ch.timeBlocks = req.body.timeBlocks || [];
+  saveAll();
+  res.json(ch.timeBlocks);
+});
 
 // ── Live Streams ──────────────────────────────────────────────────────────────
 app.get('/api/streams', (req, res) => res.json(db.streams));
