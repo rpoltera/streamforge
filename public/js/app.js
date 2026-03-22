@@ -22,7 +22,7 @@ async function sdAddLineup(lineupId, lineupName){
   } catch(e){ status.textContent = 'Error: ' + e.message; }
 }
 
-const DEFAULT_LOGO = 'https://raw.githubusercontent.com/rpoltera/streamforge/main/public/logo.png';
+const DEFAULT_LOGO = 'https://github.com/rpoltera/streamforge/blob/main/public/logo.png?raw=true';
 function applyLogoUrl(url){
   const img = document.getElementById('app-logo-img');
   const fav = document.getElementById('app-favicon');
@@ -1349,9 +1349,7 @@ async function loadSettings(){
 
     // General
     document.getElementById('cfg-baseurl').value = cfg.baseUrl||'';
-    const logoUrlEl = document.getElementById('cfg-logo-url');
-    if(logoUrlEl) logoUrlEl.value = cfg.logoUrl||'';
-    applyLogoUrl(cfg.logoUrl||'');
+    applyLogoUrl('');
 
     // AI provider
     const provider = cfg.aiProvider || 'anthropic';
@@ -1465,7 +1463,6 @@ document.getElementById('btn-save-config').addEventListener('click',async()=>{
       // General
       baseUrl:      document.getElementById('cfg-baseurl').value.trim(),
       epgDaysAhead: parseInt(document.getElementById('cfg-days').value),
-      logoUrl:      (document.getElementById('cfg-logo-url')||{value:''}).value.trim(),
       // FFmpeg
       ffmpegPath:   document.getElementById('cfg-ffmpeg').value.trim(),
       ffprobePath:  document.getElementById('cfg-ffprobe').value.trim(),
