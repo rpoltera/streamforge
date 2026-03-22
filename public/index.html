@@ -1053,6 +1053,74 @@
 </div>
 
 <div class="notif" id="notif"></div>
+<!-- LICENSE MODAL -->
+<div id="license-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:9999;align-items:center;justify-content:center;flex-direction:column">
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:16px;width:520px;max-width:95vw;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.8)">
+    <!-- Header -->
+    <div style="background:linear-gradient(135deg,#0a0a0a,#111);padding:32px;text-align:center;border-bottom:1px solid var(--border)">
+      <img src="https://github.com/rpoltera/streamforge/blob/main/public/logo.png?raw=true" style="height:56px;margin-bottom:12px" alt="StreamForge">
+      <div style="font-family:'Space Mono',monospace;font-size:1.1rem;font-weight:700;color:var(--text)">StreamForge IPTV</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-top:4px">Professional IPTV Playout Manager</div>
+    </div>
+
+    <!-- Trial view -->
+    <div id="lic-trial-view" style="padding:28px">
+      <div style="text-align:center;margin-bottom:24px">
+        <div style="font-size:2rem;margin-bottom:8px">🎉</div>
+        <div style="font-size:1.1rem;font-weight:600;color:var(--text)">Welcome to StreamForge!</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-top:6px">Start your free 7-day trial or activate a license.</div>
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:20px">
+        <div style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:var(--accent)">$25</div>
+          <div style="font-size:12px;color:var(--text-muted)">per year</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:6px">Annual License</div>
+        </div>
+        <div style="flex:1;background:var(--bg3);border:2px solid var(--accent);border-radius:10px;padding:16px;text-align:center;position:relative">
+          <div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:var(--accent);color:#000;font-size:10px;font-weight:700;padding:2px 10px;border-radius:20px;font-family:'Space Mono',monospace">BEST VALUE</div>
+          <div style="font-size:1.4rem;font-weight:700;color:var(--accent)">$110</div>
+          <div style="font-size:12px;color:var(--text-muted)">one time</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:6px">Lifetime License</div>
+        </div>
+      </div>
+      <button class="btn btn-primary" style="width:100%;margin-bottom:10px;padding:13px" id="lic-btn-trial">🚀 Start Free 7-Day Trial</button>
+      <div style="text-align:center;margin:12px 0;font-size:12px;color:var(--text-muted)">— or enter a license key —</div>
+      <div style="display:flex;gap:8px">
+        <input class="form-input" id="lic-key-input" placeholder="SF-XXXX-XXXX-XXXX-XXXX" style="flex:1;font-family:'Space Mono',monospace;letter-spacing:.05em" autocomplete="off">
+        <button class="btn btn-secondary" id="lic-btn-activate">Activate</button>
+      </div>
+      <div id="lic-error" style="color:var(--danger);font-size:12px;margin-top:8px;display:none"></div>
+      <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text3)">
+        <a href="https://github.com/rpoltera/streamforge" target="_blank" style="color:var(--accent)">Purchase a license</a>
+      </div>
+    </div>
+
+    <!-- Expired view -->
+    <div id="lic-expired-view" style="padding:28px;display:none">
+      <div style="text-align:center;margin-bottom:20px">
+        <div style="font-size:2rem;margin-bottom:8px">⏰</div>
+        <div style="font-size:1.1rem;font-weight:600;color:var(--text)">Trial Expired</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-top:6px">Your 7-day trial has ended. Enter a license key to continue.</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <input class="form-input" id="lic-key-input-exp" placeholder="SF-XXXX-XXXX-XXXX-XXXX" style="flex:1;font-family:'Space Mono',monospace;letter-spacing:.05em" autocomplete="off">
+        <button class="btn btn-primary" id="lic-btn-activate-exp">Activate</button>
+      </div>
+      <div id="lic-error-exp" style="color:var(--danger);font-size:12px;margin-top:8px;display:none"></div>
+      <div style="background:var(--bg3);border-radius:8px;padding:14px;margin-top:16px;font-size:12px;color:var(--text-muted);text-align:center">
+        Annual: <strong style="color:var(--text)">$25/yr</strong> &nbsp;·&nbsp; Lifetime: <strong style="color:var(--accent)">$110</strong><br>
+        <a href="https://github.com/rpoltera/streamforge" target="_blank" style="color:var(--accent);margin-top:6px;display:inline-block">Purchase at github.com/rpoltera/streamforge →</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Trial banner (shows during trial, dismissible) -->
+  <div id="lic-trial-banner" style="display:none;margin-top:16px;background:rgba(0,230,118,.1);border:1px solid var(--accent);border-radius:8px;padding:10px 20px;font-size:12px;color:var(--text2);text-align:center;max-width:520px">
+    <span id="lic-trial-banner-text"></span> &nbsp;·&nbsp;
+    <a href="https://github.com/rpoltera/streamforge" target="_blank" style="color:var(--accent)">Purchase license</a>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.11/dist/hls.min.js"></script>
 <script src="/js/app.js"></script>
 </body>
