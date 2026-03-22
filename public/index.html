@@ -899,6 +899,16 @@
                 <label class="form-label">Tell the AI what you want</label>
                 <textarea class="form-input" id="ai-prompt" rows="4" placeholder="e.g. Build me a schedule similar to Discovery Channel's Tuesday lineup using my documentary content. Focus on science and nature shows."></textarea>
               </div>
+              <div class="form-group">
+                <label class="form-label">📡 Add Live Stream to Schedule (optional)</label>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end">
+                  <select class="form-input" id="ai-stream-select" style="flex:1;min-width:160px"><option value="">— Pick a stream —</option></select>
+                  <input class="form-input" id="ai-stream-time" type="time" style="width:110px" placeholder="Time">
+                  <input class="form-input" id="ai-stream-dur" type="number" min="1" value="30" style="width:80px" title="Duration (minutes)">
+                  <button class="btn btn-secondary btn-sm" id="btn-ai-add-stream-hint">+ Add to Prompt</button>
+                </div>
+                <div class="form-hint">Pick a stream, set a time and duration, then add it to your prompt so the AI schedules it.</div>
+              </div>
               <button class="btn btn-primary" id="btn-ai-build" style="width:100%">🤖 Build Schedule with AI</button>
             </div>
           </div>
