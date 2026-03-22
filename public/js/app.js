@@ -1989,6 +1989,77 @@ document.getElementById('btn-ai-add-stream-hint')?.addEventListener('click', () 
   notify(`Added "${stream.name}" to prompt`);
 });
 
+document.getElementById('btn-ai-build-all').addEventListener('click', async () => {
+  const userPrompt = document.getElementById('ai-prompt').value.trim();
+  const date = document.getElementById('ai-epg-date').value;
+  const btn = document.getElementById('btn-ai-build-all');
+  const progressEl = document.getElementById('ai-bulk-progress');
+  const statusEl = document.getElementById('ai-bulk-status');
+  const barEl = document.getElementById('ai-bulk-bar');
+
+  // Get all channels that have an EPG channel linked (by name match)
+  let channels = [];
+  try { channels = await API.get('/api/channels'); } catch(e) { notify('Failed to load channels', true); return; }
+  const epg = await API.get('/api/epg');
+  const epgChannelIds = new Set((epg.channels||[]).map(c => c.id));
+
+  // Match SF channels to EPG channels by name
+  const epgByName = {};
+  (epg.channels||[]).forEach(c => { epgByName[c.name?.toLowerCase()] = c.id; });
+
+  const channelsToProcess = channels.filter(ch => {
+    return epgByName[ch.name?.toLowerCase()] || ch.epgChannelId;
+  });
+
+  if (!channelsToProcess.length) {
+    notify('No channels matched to EPG channels. Make sure your channel names match EPG channel names.', true);
+    return;
+  }
+
+  if (!confirm(`Build AI schedules for ${channelsToProcess.length} channel(s)? This may take several minutes.`)) return;
+
+  btn.disabled = true;
+  progressEl.style.display = '';
+  let done = 0;
+  const errors = [];
+
+  for (const ch of channelsToProcess) {
+    const epgId = ch.epgChannelId || epgByName[ch.name?.toLowerCase()];
+    statusEl.textContent = `Building ${ch.name}... (${done+1}/${channelsToProcess.length})`;
+    barEl.style.width = `${Math.round((done/channelsToProcess.length)*100)}%`;
+
+    try {
+      const r = await API.post('/api/ai/build-schedule', {
+        channelId: epgId,
+        date,
+        userPrompt: userPrompt || 'Match my library to this channel as closely as possible',
+        targetChannelId: ch.id,
+      });
+
+      if (r.suggestions?.length) {
+        const mediaSuggestions = r.suggestions.filter(s => s.mediaId && !s.liveBlock && !s.streamId);
+        if (mediaSuggestions.length) {
+          const current = await API.get(`/api/channels/${ch.id}/playout`);
+          const newPlayout = [
+            ...current.map(b => b.streamId ? {streamId:b.streamId,duration:b.duration} : {mediaId:b.mediaId}),
+            ...mediaSuggestions.map(s => ({mediaId:s.mediaId})),
+          ];
+          await API.put(`/api/channels/${ch.id}/playout`, {playout: newPlayout});
+        }
+      }
+    } catch(e) {
+      errors.push(`${ch.name}: ${e.message}`);
+    }
+    done++;
+  }
+
+  barEl.style.width = '100%';
+  statusEl.textContent = `Done! Built ${done} channels${errors.length ? ` (${errors.length} errors)` : ''}.`;
+  btn.disabled = false;
+  notify(`✅ Built schedules for ${done - errors.length}/${done} channels`);
+  if (errors.length) console.error('AI bulk build errors:', errors);
+});
+
 document.getElementById('btn-ai-build').addEventListener('click', async () => {
   const channelId  = document.getElementById('ai-epg-channel').value;
   const date       = document.getElementById('ai-epg-date').value;
