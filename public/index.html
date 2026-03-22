@@ -105,29 +105,29 @@
         </div>
       </div>
       <div id="channels-list"></div>
+    </div>
 
-      <!-- Create from EPG Modal -->
-      <div class="modal" id="modal-epg-channels">
-        <div class="modal-box" style="max-width:680px">
-          <div class="modal-header">
-            <span class="modal-title">Create Channels from EPG</span>
-            <button class="modal-close" onclick="closeModal('modal-epg-channels')">✕</button>
+    <!-- Create from EPG Modal (outside page divs so it overlays correctly) -->
+    <div class="modal" id="modal-epg-channels">
+      <div class="modal-box" style="max-width:680px">
+        <div class="modal-header">
+          <span class="modal-title">Create Channels from EPG</span>
+          <button class="modal-close" onclick="closeModal('modal-epg-channels')">✕</button>
+        </div>
+        <div class="modal-body" style="padding:0">
+          <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <select class="filter-select" id="epg-ch-group" style="min-width:160px"><option value="">All Groups</option></select>
+            <div class="search-wrap" style="flex:1;min-width:160px"><span class="search-icon">🔍</span><input class="search-input" id="epg-ch-search" type="text" placeholder="Filter channels..."></div>
+            <button class="btn btn-secondary btn-sm" id="btn-epg-ch-all">Select All</button>
+            <button class="btn btn-secondary btn-sm" id="btn-epg-ch-none">None</button>
           </div>
-          <div class="modal-body" style="padding:0">
-            <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-              <select class="filter-select" id="epg-ch-group" style="min-width:160px"><option value="">All Groups</option></select>
-              <div class="search-wrap" style="flex:1;min-width:160px"><span class="search-icon">🔍</span><input class="search-input" id="epg-ch-search" type="text" placeholder="Filter channels..."></div>
-              <button class="btn btn-secondary btn-sm" id="btn-epg-ch-all">Select All</button>
-              <button class="btn btn-secondary btn-sm" id="btn-epg-ch-none">None</button>
-            </div>
-            <div id="epg-ch-list" style="max-height:420px;overflow-y:auto"></div>
-          </div>
-          <div class="modal-footer" style="justify-content:space-between">
-            <span id="epg-ch-count" style="color:var(--text-muted);font-size:13px">0 selected</span>
-            <div style="display:flex;gap:8px">
-              <button class="btn btn-secondary" onclick="closeModal('modal-epg-channels')">Cancel</button>
-              <button class="btn btn-primary" id="btn-create-epg-channels">Create Selected Channels</button>
-            </div>
+          <div id="epg-ch-list" style="max-height:420px;overflow-y:auto"></div>
+        </div>
+        <div class="modal-footer" style="justify-content:space-between">
+          <span id="epg-ch-count" style="color:var(--text-muted);font-size:13px">0 selected</span>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-secondary" onclick="closeModal('modal-epg-channels')">Cancel</button>
+            <button class="btn btn-primary" id="btn-create-epg-channels">Create Selected Channels</button>
           </div>
         </div>
       </div>
@@ -886,7 +886,7 @@
         </div>
       </div>
       <div class="filter-bar">
-        <div class="search-wrap" style="max-width:340px"><span class="search-icon">🔍</span><input class="search-input" id="epg-ch-search" type="text" placeholder="Search channels..."></div>
+        <div class="search-wrap" style="max-width:340px"><span class="search-icon">🔍</span><input class="search-input" id="epg-browser-search" type="text" placeholder="Search channels..."></div>
       </div>
       <div id="epg-browser-content">
         <div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">No EPG imported yet. Go to EPG Import first.</div></div>
