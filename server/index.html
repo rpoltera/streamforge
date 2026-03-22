@@ -23,6 +23,7 @@
       <div class="nav-item" data-page="schedule"><span class="nav-icon">🗓️</span><span>Schedule</span></div>
       <div class="nav-item" data-page="watch"><span class="nav-icon">📺</span><span>Watch</span></div>
       <div class="nav-sep">EPG & AI</div>
+      <div class="nav-item" data-page="streams"><span class="nav-icon">📡</span><span>Live Streams</span></div>
       <div class="nav-item" data-page="epg-import"><span class="nav-icon">📥</span><span>EPG Import</span></div>
       <div class="nav-item" data-page="epg-browser"><span class="nav-icon">📋</span><span>EPG Browser</span></div>
       <div class="nav-item" data-page="ai-scheduler"><span class="nav-icon">🤖</span><span>AI Scheduler</span></div>
@@ -148,6 +149,19 @@
                 </div>
                 <div id="picker-results" class="picker-results"></div>
                 <div id="picker-pagination" class="pagination" style="margin-top:8px"></div>
+              </div>
+            </div>
+            <div class="card" style="margin-top:14px">
+              <div class="card-header"><span class="card-title">📡 Add Live Stream Block</span></div>
+              <div class="card-body" style="padding:12px">
+                <div class="form-group" style="margin-bottom:8px">
+                  <select class="form-input" id="picker-stream-select"><option value="">Select a stream...</option></select>
+                </div>
+                <div class="form-group" style="margin-bottom:8px">
+                  <label class="form-label">Duration (minutes)</label>
+                  <input class="form-input" id="picker-stream-duration" type="number" min="1" value="60" style="width:120px">
+                </div>
+                <button class="btn btn-secondary btn-sm" id="btn-add-stream-block">+ Add to Queue</button>
               </div>
             </div>
           </div>
@@ -671,6 +685,32 @@
       </div>
     </div>
 
+    <!-- LIVE STREAMS -->
+    <div class="page" id="page-streams">
+      <div class="section-header">
+        <div><div class="section-title">Live Streams</div><div class="section-sub">Add IPTV, HDHomeRun, or any live stream URL for use in playout blocks</div></div>
+        <button class="btn btn-primary" id="btn-add-stream">+ Add Stream</button>
+      </div>
+      <div id="streams-list"></div>
+
+      <!-- Add/Edit Modal -->
+      <div class="modal" id="modal-stream">
+        <div class="modal-box" style="max-width:500px">
+          <div class="modal-header"><span class="modal-title" id="stream-modal-title">Add Stream</span><button class="modal-close" onclick="closeModal('modal-stream')">✕</button></div>
+          <div class="modal-body">
+            <div class="form-group"><label class="form-label">Name</label><input class="form-input" id="stream-name" placeholder="e.g. ABC Local, HDHomeRun Ch5"></div>
+            <div class="form-group"><label class="form-label">Stream URL</label><input class="form-input" id="stream-url" placeholder="http://192.168.1.x:5004/auto/v5 or http://...m3u8"></div>
+            <div class="form-group"><label class="form-label">Group (optional)</label><input class="form-input" id="stream-group" placeholder="e.g. Local, IPTV, Sports"></div>
+            <div class="form-group"><label class="form-label">Logo URL (optional)</label><input class="form-input" id="stream-icon" placeholder="https://..."></div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal('modal-stream')">Cancel</button>
+            <button class="btn btn-primary" id="btn-save-stream">Save Stream</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- EPG IMPORT -->
     <div class="page" id="page-epg-import">
       <div class="section-header">
@@ -716,14 +756,31 @@
               <input class="form-input" id="sd-password" type="password" placeholder="Schedules Direct password">
             </div>
           </div>
-          <div id="sd-lineups-wrap" style="display:none;margin-top:14px">
-            <label class="form-label">Lineup</label>
-            <select class="form-input" id="sd-lineup" style="margin-bottom:10px"></select>
-          </div>
           <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
             <button class="btn btn-secondary" id="btn-sd-lineups">🔍 Fetch Lineups</button>
-            <button class="btn btn-primary" id="btn-sd-import" style="display:none">⬇ Import Guide</button>
-            <button class="btn btn-secondary" id="btn-sd-save" style="display:none">💾 Save &amp; Auto-Update</button>
+          </div>
+          <div id="sd-lineups-wrap" style="display:none;margin-top:14px">
+            <label class="form-label">Your Lineups</label>
+            <select class="form-input" id="sd-lineup" style="margin-bottom:10px"></select>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <button class="btn btn-primary" id="btn-sd-import">⬇ Import Guide</button>
+              <button class="btn btn-secondary" id="btn-sd-save">💾 Save &amp; Auto-Update</button>
+            </div>
+          </div>
+          <div id="sd-add-lineup-wrap" style="display:none;margin-top:14px;padding:12px;background:var(--bg3);border-radius:8px">
+            <div class="form-label" style="margin-bottom:8px">No lineups found — search by zip code to add one:</div>
+            <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap">
+              <div class="form-group" style="margin:0;flex:0 0 120px">
+                <label class="form-label">Zip Code</label>
+                <input class="form-input" id="sd-zip" type="text" placeholder="97601" maxlength="10">
+              </div>
+              <div class="form-group" style="margin:0;flex:0 0 80px">
+                <label class="form-label">Country</label>
+                <input class="form-input" id="sd-country" type="text" placeholder="USA" maxlength="3" value="USA">
+              </div>
+              <button class="btn btn-secondary" id="btn-sd-search" style="margin-bottom:0">🔍 Search</button>
+            </div>
+            <div id="sd-search-results" style="margin-top:10px"></div>
           </div>
           <div id="sd-status" style="margin-top:10px;font-size:13px;color:var(--text-muted)"></div>
           <div class="form-hint" style="margin-top:10px">Requires a paid <a href="https://schedulesdirect.org" target="_blank" style="color:var(--accent)">Schedules Direct</a> account (~$35/yr). Once saved, the guide auto-refreshes daily.</div>

@@ -148,6 +148,7 @@ const CHANNELS_FILE  = path.join(config.dataDir, 'channels.json');
 const LIBRARIES_FILE = path.join(config.dataDir, 'libraries.json');
 const MEDIA_FILE     = path.join(config.dataDir, 'media.json');
 const EPG_FILE       = path.join(config.dataDir, 'epg.json');
+const STREAMS_FILE   = path.join(config.dataDir, 'streams.json');
 const UPLOADS_DIR    = path.join(config.dataDir, 'uploads');
 
 [
@@ -162,6 +163,7 @@ let db = {
   libraries: loadJson(LIBRARIES_FILE, []),
   media:     loadJson(MEDIA_FILE,     []),
   epg:       loadJson(EPG_FILE,       { channels: [], programs: [], importedAt: null, sourceName: '' }),
+  streams:   loadJson(STREAMS_FILE,   []),
 };
 
 function loadJson(f, def) {
@@ -176,6 +178,7 @@ function saveAll() {
   saveJson(LIBRARIES_FILE, db.libraries);
   saveJson(MEDIA_FILE,     db.media);
   saveJson(EPG_FILE,       db.epg);
+  saveJson(STREAMS_FILE,   db.streams);
 }
 
 // ── Express ───────────────────────────────────────────────────────────────────
@@ -477,8 +480,9 @@ function getPlayoutNow(channel, nowMs) {
   const playout = channel.playout || [];
   if (!playout.length) return null;
 
-  // Total duration of one loop
+  // Total duration of one loop — stream blocks use configured duration
   const totalDuration = playout.reduce((sum, block) => {
+    if (block.streamId) return sum + (block.duration || 3600);
     const item = db.media.find(m => m.id === block.mediaId);
     return sum + (item ? (item.duration || 1800) : 1800);
   }, 0);
@@ -498,6 +502,25 @@ function getPlayoutNow(channel, nowMs) {
   let cursor = 0;
 
   for (const block of playout) {
+    // Live stream block
+    if (block.streamId) {
+      const stream = db.streams.find(s => s.id === block.streamId);
+      const dur = (block.duration || 3600) * 1000;
+      if (elapsed < cursor + dur) {
+        const startTime = anchor + Math.floor((nowMs - anchor) / (totalDuration * 1000)) * totalDuration * 1000 + cursor;
+        return {
+          item: null,
+          stream,
+          block,
+          offsetSeconds: 0, // always play live from beginning
+          startTime,
+          endTime: startTime + dur,
+          isLive: true,
+        };
+      }
+      cursor += dur;
+      continue;
+    }
     const item = db.media.find(m => m.id === block.mediaId);
     if (!item) continue;
     const dur = (item.duration || 1800) * 1000;
@@ -523,6 +546,7 @@ function buildChannelSchedule(channel, fromMs, toMs) {
   if (!playout.length) return [];
 
   const totalDuration = playout.reduce((sum, block) => {
+    if (block.streamId) return sum + (block.duration || 3600);
     const item = db.media.find(m => m.id === block.mediaId);
     return sum + (item ? (item.duration || 1800) : 1800);
   }, 0);
@@ -546,6 +570,17 @@ function buildChannelSchedule(channel, fromMs, toMs) {
   while (loopStart < toMs) {
     let cursor = loopStart;
     for (const block of playout) {
+      if (block.streamId) {
+        const stream = db.streams.find(s => s.id === block.streamId);
+        const durMs = (block.duration || 3600) * 1000;
+        const start = cursor;
+        const end = cursor + durMs;
+        if (end > fromMs && start < toMs) {
+          programs.push({ start, end, title: stream ? `🔴 ${stream.name}` : '🔴 Live Stream', isLive: true });
+        }
+        cursor += durMs;
+        continue;
+      }
       const item = db.media.find(m => m.id === block.mediaId);
       if (!item) continue;
       const durMs = (item.duration || 1800) * 1000;
@@ -842,10 +877,12 @@ app.delete('/api/channels/:id', (req, res) => {
 app.get('/api/channels/:id/playout', (req, res) => {
   const ch = db.channels.find(c => c.id === req.params.id);
   if (!ch) return res.status(404).json({ error: 'not found' });
-  const playout = (ch.playout || []).map(block => ({
-    ...block,
-    item: db.media.find(m => m.id === block.mediaId) || null,
-  }));
+  const playout = (ch.playout || []).map(block => {
+    if (block.streamId) {
+      return { ...block, stream: db.streams.find(s => s.id === block.streamId) || null };
+    }
+    return { ...block, item: db.media.find(m => m.id === block.mediaId) || null };
+  });
   res.json(playout);
 });
 
@@ -882,12 +919,19 @@ app.get('/stream/:channelId', (req, res) => {
   if (!ch) return res.status(404).send('Channel not found');
 
   const now = getPlayoutNow(ch, Date.now());
-  if (!now || !now.item) return res.status(404).send('Nothing scheduled on this channel');
+  if (!now) return res.status(404).send('Nothing scheduled on this channel');
 
-  const src = resolveStreamSource(now.item);
-  if (!src) return res.status(404).send('Media source not found. Check library connection.');
+  // Live stream block — pass URL directly
+  let src;
+  if (now.isLive && now.stream) {
+    src = { type: 'http', value: now.stream.url };
+  } else {
+    if (!now.item) return res.status(404).send('Nothing scheduled on this channel');
+    src = resolveStreamSource(now.item);
+    if (!src) return res.status(404).send('Media source not found. Check library connection.');
+  }
 
-  const offset = now.offsetSeconds;
+  const offset = now.isLive ? 0 : now.offsetSeconds;
 
   res.setHeader('Content-Type', 'video/mp2t');
   res.setHeader('Transfer-Encoding', 'chunked');
@@ -1051,20 +1095,26 @@ function startHlsSession(ch) {
   } catch (_) {}
 
   const now = getPlayoutNow(ch, Date.now());
-  if (!now || !now.item) {
+  if (!now) {
     console.log(`[sf/hls] No playout item found for channel ${ch.id}`);
     return null;
   }
 
-  const src = resolveStreamSource(now.item);
-  if (!src) {
-    console.log(`[sf/hls] No stream source for item: ${now.item.title} (id:${now.item.id})`);
-    return null;
+  let src;
+  if (now.isLive && now.stream) {
+    src = { type: 'http', value: now.stream.url };
+    console.log(`[sf/hls] Starting LIVE stream "${now.stream.name}" url=${now.stream.url.slice(0,60)}`);
+  } else {
+    if (!now.item) { console.log(`[sf/hls] No playout item for ${ch.id}`); return null; }
+    src = resolveStreamSource(now.item);
+    if (!src) {
+      console.log(`[sf/hls] No stream source for item: ${now.item.title} (id:${now.item.id})`);
+      return null;
+    }
+    console.log(`[sf/hls] Starting stream for "${now.item.title}" offset=${now.offsetSeconds}s src=${src.type}:${src.value.slice(0,60)}`);
   }
 
-  console.log(`[sf/hls] Starting stream for "${now.item.title}" offset=${now.offsetSeconds}s src=${src.type}:${src.value.slice(0,60)}`);
-
-  const ffArgs = buildFfmpegArgs(src, now.offsetSeconds, {
+  const ffArgs = buildFfmpegArgs(src, now.isLive ? 0 : now.offsetSeconds, {
     outputFormat: 'hls',
     hlsDir,
   });
@@ -1756,6 +1806,36 @@ async function schedulesDirectRefresh() {
 // Run SD refresh on startup + every 24h
 schedulesDirectRefresh();
 setInterval(schedulesDirectRefresh, 24 * 60 * 60 * 1000);
+
+// ── Live Streams ──────────────────────────────────────────────────────────────
+app.get('/api/streams', (req, res) => res.json(db.streams));
+
+app.post('/api/streams', (req, res) => {
+  const { name, url, group, icon } = req.body;
+  if (!name || !url) return res.status(400).json({ error: 'name and url required' });
+  const stream = { id: uuidv4(), name, url, group: group||'', icon: icon||'', createdAt: new Date().toISOString() };
+  db.streams.push(stream);
+  saveAll();
+  res.json(stream);
+});
+
+app.put('/api/streams/:id', (req, res) => {
+  const s = db.streams.find(s => s.id === req.params.id);
+  if (!s) return res.status(404).json({ error: 'not found' });
+  const { name, url, group, icon } = req.body;
+  if (name) s.name = name;
+  if (url)  s.url  = url;
+  if (group !== undefined) s.group = group;
+  if (icon  !== undefined) s.icon  = icon;
+  saveAll();
+  res.json(s);
+});
+
+app.delete('/api/streams/:id', (req, res) => {
+  db.streams = db.streams.filter(s => s.id !== req.params.id);
+  saveAll();
+  res.json({ ok: true });
+});
 
 // ── Schedules Direct proxy ────────────────────────────────────────────────────
 const SD_BASE = 'https://json.schedulesdirect.org/20141201';
