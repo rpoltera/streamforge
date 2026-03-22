@@ -23,6 +23,7 @@
       <div class="nav-item" data-page="schedule"><span class="nav-icon">🗓️</span><span>Schedule</span></div>
       <div class="nav-item" data-page="watch"><span class="nav-icon">📺</span><span>Watch</span></div>
       <div class="nav-sep">EPG & AI</div>
+      <div class="nav-item" data-page="streams"><span class="nav-icon">📡</span><span>Live Streams</span></div>
       <div class="nav-item" data-page="epg-import"><span class="nav-icon">📥</span><span>EPG Import</span></div>
       <div class="nav-item" data-page="epg-browser"><span class="nav-icon">📋</span><span>EPG Browser</span></div>
       <div class="nav-item" data-page="ai-scheduler"><span class="nav-icon">🤖</span><span>AI Scheduler</span></div>
@@ -148,6 +149,19 @@
                 </div>
                 <div id="picker-results" class="picker-results"></div>
                 <div id="picker-pagination" class="pagination" style="margin-top:8px"></div>
+              </div>
+            </div>
+            <div class="card" style="margin-top:14px">
+              <div class="card-header"><span class="card-title">📡 Add Live Stream Block</span></div>
+              <div class="card-body" style="padding:12px">
+                <div class="form-group" style="margin-bottom:8px">
+                  <select class="form-input" id="picker-stream-select"><option value="">Select a stream...</option></select>
+                </div>
+                <div class="form-group" style="margin-bottom:8px">
+                  <label class="form-label">Duration (minutes)</label>
+                  <input class="form-input" id="picker-stream-duration" type="number" min="1" value="60" style="width:120px">
+                </div>
+                <button class="btn btn-secondary btn-sm" id="btn-add-stream-block">+ Add to Queue</button>
               </div>
             </div>
           </div>
@@ -666,6 +680,32 @@
           <div class="card" style="height:100%">
             <div class="card-header"><span class="card-title">Channels</span></div>
             <div id="watch-ch-list" class="watch-ch-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LIVE STREAMS -->
+    <div class="page" id="page-streams">
+      <div class="section-header">
+        <div><div class="section-title">Live Streams</div><div class="section-sub">Add IPTV, HDHomeRun, or any live stream URL for use in playout blocks</div></div>
+        <button class="btn btn-primary" id="btn-add-stream">+ Add Stream</button>
+      </div>
+      <div id="streams-list"></div>
+
+      <!-- Add/Edit Modal -->
+      <div class="modal" id="modal-stream">
+        <div class="modal-box" style="max-width:500px">
+          <div class="modal-header"><span class="modal-title" id="stream-modal-title">Add Stream</span><button class="modal-close" onclick="closeModal('modal-stream')">✕</button></div>
+          <div class="modal-body">
+            <div class="form-group"><label class="form-label">Name</label><input class="form-input" id="stream-name" placeholder="e.g. ABC Local, HDHomeRun Ch5"></div>
+            <div class="form-group"><label class="form-label">Stream URL</label><input class="form-input" id="stream-url" placeholder="http://192.168.1.x:5004/auto/v5 or http://...m3u8"></div>
+            <div class="form-group"><label class="form-label">Group (optional)</label><input class="form-input" id="stream-group" placeholder="e.g. Local, IPTV, Sports"></div>
+            <div class="form-group"><label class="form-label">Logo URL (optional)</label><input class="form-input" id="stream-icon" placeholder="https://..."></div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal('modal-stream')">Cancel</button>
+            <button class="btn btn-primary" id="btn-save-stream">Save Stream</button>
           </div>
         </div>
       </div>
