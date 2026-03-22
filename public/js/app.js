@@ -623,6 +623,12 @@ document.getElementById('btn-create-from-epg')?.addEventListener('click', async 
     // Get existing channel names to avoid duplicates
     epgExistingNames = new Set((await API.get('/api/channels')).map(c => c.name.toLowerCase()));
 
+    // Populate group dropdown
+    const groups = [...new Set(epgChannelList.map(c => c.group).filter(Boolean))].sort();
+    const groupSel = document.getElementById('epg-ch-group');
+    groupSel.innerHTML = '<option value="">All Groups</option>' +
+      groups.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('');
+
     selectedEpgChannels = new Set();
     renderEpgChannelList();
     openModal('modal-epg-channels');
@@ -632,7 +638,12 @@ document.getElementById('btn-create-from-epg')?.addEventListener('click', async 
 function renderEpgChannelList() {
   const el = document.getElementById('epg-ch-list');
   const filter = document.getElementById('epg-ch-search')?.value.toLowerCase() || '';
-  const filtered = epgChannelList.filter(c => !filter || (c.name||c.id).toLowerCase().includes(filter));
+  const group = document.getElementById('epg-ch-group')?.value || '';
+  const filtered = epgChannelList.filter(c => {
+    if (group && c.group !== group) return false;
+    if (filter && !(c.name||c.id).toLowerCase().includes(filter)) return false;
+    return true;
+  });
 
   if (!filtered.length) {
     el.innerHTML = '<div style="padding:16px;color:var(--text-muted);text-align:center">No channels match your search</div>';
@@ -668,11 +679,16 @@ function updateEpgCount() {
 }
 
 document.getElementById('epg-ch-search')?.addEventListener('input', () => renderEpgChannelList());
+document.getElementById('epg-ch-group')?.addEventListener('change', () => renderEpgChannelList());
 
 document.getElementById('btn-epg-ch-all')?.addEventListener('click', () => {
   const filter = document.getElementById('epg-ch-search')?.value.toLowerCase() || '';
-  epgChannelList.filter(c => !filter || (c.name||c.id).toLowerCase().includes(filter))
-    .forEach(c => { if (!epgExistingNames.has((c.name||c.id).toLowerCase())) selectedEpgChannels.add(c.id); });
+  const group = document.getElementById('epg-ch-group')?.value || '';
+  epgChannelList.filter(c => {
+    if (group && c.group !== group) return false;
+    if (filter && !(c.name||c.id).toLowerCase().includes(filter)) return false;
+    return true;
+  }).forEach(c => { if (!epgExistingNames.has((c.name||c.id).toLowerCase())) selectedEpgChannels.add(c.id); });
   renderEpgChannelList();
 });
 
