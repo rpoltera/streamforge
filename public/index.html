@@ -108,8 +108,8 @@
     </div>
 
     <!-- Create from EPG Modal (outside page divs so it overlays correctly) -->
-    <div class="modal" id="modal-epg-channels">
-      <div class="modal-box" style="max-width:680px">
+    <div class="modal-overlay" id="modal-epg-channels">
+      <div class="modal" style="max-width:680px">
         <div class="modal-header">
           <span class="modal-title">Create Channels from EPG</span>
           <button class="modal-close" onclick="closeModal('modal-epg-channels')">✕</button>
@@ -730,8 +730,8 @@
       <div id="streams-list"></div>
 
       <!-- Time Block Modal -->
-      <div class="modal" id="modal-timeblock">
-        <div class="modal-box" style="max-width:480px">
+      <div class="modal-overlay" id="modal-timeblock">
+        <div class="modal" style="max-width:480px">
           <div class="modal-header"><span class="modal-title">Schedule Stream Block</span><button class="modal-close" onclick="closeModal('modal-timeblock')">✕</button></div>
           <div class="modal-body">
             <div class="form-group">
@@ -773,8 +773,8 @@
       </div>
 
       <!-- Add/Edit Stream Modal -->
-      <div class="modal" id="modal-stream">
-        <div class="modal-box" style="max-width:500px">
+      <div class="modal-overlay" id="modal-stream">
+        <div class="modal" style="max-width:500px">
           <div class="modal-header"><span class="modal-title" id="stream-modal-title">Add Stream</span><button class="modal-close" onclick="closeModal('modal-stream')">✕</button></div>
           <div class="modal-body">
             <div class="form-group"><label class="form-label">Name</label><input class="form-input" id="stream-name" placeholder="e.g. ABC Local, HDHomeRun Ch5"></div>
