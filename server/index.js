@@ -1589,12 +1589,16 @@ CRITICAL RULES:
 8. Use the same filler show consistently for the same recurring unmatched title.
 9. Do not place the same filler show back to back — vary it.
 10. Return one suggestion per EPG slot in order.
+11. If SCHEDULED LIVE STREAM BLOCKS are listed, those time slots are already handled — mark them with { "liveBlock": true, "title": "block label", "reason": "covered by live stream" } instead of a mediaId.
+12. If the user asks to add a live stream to a specific time slot, include { "streamId": "stream-uuid", "title": "stream name", "duration": minutes, "reason": "user requested" } in suggestions.
 
 Return ONLY valid JSON, no markdown:
 {
   "reasoning": "brief strategy",
   "suggestions": [
-    { "mediaId": "exact-uuid", "title": "title", "reason": "why it matches" }
+    { "mediaId": "exact-uuid", "title": "title", "reason": "why it matches" },
+    { "streamId": "exact-stream-uuid", "title": "stream name", "duration": 30, "reason": "live stream block" },
+    { "liveBlock": true, "title": "Local News 6PM", "reason": "covered by scheduled live stream" }
   ],
   "unmatchedSlots": ["EPG titles with no library match that used filler"]
 }`;
@@ -1608,12 +1612,33 @@ Return ONLY valid JSON, no markdown:
     return `  ${t} [${dur}] "${p.title}"`;
   }).join('\n');
 
+  // Build live streams and time blocks context for the target channel
+  const targetChannel = db.channels.find(c => c.id === (targetChannelId || channelId));
+  const channelTimeBlocks = (targetChannel?.timeBlocks || []);
+  const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const timeBlockLines = channelTimeBlocks.map(tb => {
+    const stream = db.streams.find(s => s.id === tb.streamId);
+    const days = (tb.days||[0,1,2,3,4,5,6]).map(d=>DAYS[d]).join(',');
+    const endH = Math.floor(((tb.startTime||'00:00').split(':').map(Number).reduce((h,m,i)=>i===0?h+m*60:h+m,0) + (tb.duration||60)) / 60);
+    const endM = ((tb.startTime||'00:00').split(':').map(Number).reduce((h,m,i)=>i===0?h*60+0:m,0) + (tb.duration||60)) % 60;
+    return `  LIVE BLOCK: ${tb.startTime}–${String(endH%24).padStart(2,'0')}:${String(endM).padStart(2,'0')} [${days}] → "${stream?.name||'Unknown'}" (URL: ${stream?.url||''})`;
+  });
+
+  const allStreams = db.streams.map(s => `  STREAM: [${s.id}] "${s.name}"${s.group?` (${s.group})`:''} → ${s.url}`);
+
   const userMessage = `EPG Channel: ${epgChannel?.name || channelId}
 Date: ${date || 'today'}
 
 FULL 24-HOUR EPG SCHEDULE (${programs.length} slots — fill ALL of these):
 ${fullSchedule}
 
+${channelTimeBlocks.length ? `SCHEDULED LIVE STREAM BLOCKS (these time slots are already covered by live streams — do NOT schedule library content here, mark them as liveBlock):
+${timeBlockLines.join('\n')}
+
+` : ''}${allStreams.length ? `AVAILABLE LIVE STREAMS (use streamId for live stream suggestions):
+${allStreams.join('\n')}
+
+` : ''}
 LIBRARY — TV Shows (${showMap.size} series total — shows marked ✓MATCH are fuzzy-matched to EPG):
 ${showLines.join('\n')}
 
@@ -1692,11 +1717,29 @@ Return JSON only.`;
       return res.status(500).json({ error: 'AI returned invalid JSON', raw: text.slice(0, 500) });
     }
 
-    // Resolve media items from IDs
-    const suggestions = (parsed.suggestions || []).map(s => ({
-      ...s,
-      item: db.media.find(m => m.id === s.mediaId) || null,
-    })).filter(s => s.item);
+    // Resolve media items from IDs — also handle liveBlock and streamId suggestions
+    const suggestions = (parsed.suggestions || []).map(s => {
+      if (s.liveBlock) return { ...s, item: null };
+      if (s.streamId) {
+        const stream = db.streams.find(st => st.id === s.streamId);
+        return { ...s, item: null, stream: stream || null };
+      }
+      return { ...s, item: db.media.find(m => m.id === s.mediaId) || null };
+    }).filter(s => s.liveBlock || s.streamId || s.item);
+
+    // If AI suggested new time blocks via streamId+startTime, auto-add to target channel
+    const newTimeBlocks = (parsed.suggestions || []).filter(s => s.streamId && s.startTime);
+    if (newTimeBlocks.length && targetChannel) {
+      const existing = targetChannel.timeBlocks || [];
+      newTimeBlocks.forEach(tb => {
+        if (!existing.find(e => e.streamId === tb.streamId && e.startTime === tb.startTime)) {
+          existing.push({ id: Date.now().toString()+Math.random(), streamId: tb.streamId,
+            startTime: tb.startTime, duration: tb.duration||60, days: [0,1,2,3,4,5,6], label: tb.title||'' });
+        }
+      });
+      targetChannel.timeBlocks = existing;
+      saveAll();
+    }
 
     res.json({
       ok: true,
