@@ -1916,7 +1916,7 @@ async function openEpgChannel(channelId, channelName) {
   } catch(e) { console.error(e); }
 }
 
-document.getElementById('epg-ch-search').addEventListener('input', e => {
+document.getElementById('epg-browser-search').addEventListener('input', e => {
   renderEpgChannelList(epgData.channels, e.target.value);
 });
 document.getElementById('epg-browser-date').addEventListener('change', loadEpgBrowser);
