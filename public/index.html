@@ -127,7 +127,12 @@
               </div>
             </div>
             <div class="card" style="margin-top:14px">
-              <div class="card-header"><span class="card-title">Playout Start Time</span></div>
+              <div class="card-header">
+                <span class="card-title">🕐 Scheduled Stream Blocks</span>
+                <button class="btn btn-sm btn-primary" id="btn-add-timeblock">+ Add</button>
+              </div>
+              <div id="timeblocks-list" style="padding:0"></div>
+            </div>
               <div class="card-body">
                 <div class="form-group">
                   <label class="form-label">Anchor time (when the loop started)</label>
@@ -693,8 +698,50 @@
       </div>
       <div id="streams-list"></div>
 
-      <!-- Add/Edit Modal -->
-      <div class="modal" id="modal-stream">
+      <!-- Time Block Modal -->
+      <div class="modal" id="modal-timeblock">
+        <div class="modal-box" style="max-width:480px">
+          <div class="modal-header"><span class="modal-title">Schedule Stream Block</span><button class="modal-close" onclick="closeModal('modal-timeblock')">✕</button></div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label class="form-label">Stream</label>
+              <select class="form-input" id="tb-stream"></select>
+            </div>
+            <div class="two-col" style="gap:12px">
+              <div class="form-group">
+                <label class="form-label">Start Time</label>
+                <input class="form-input" id="tb-start" type="time" value="18:00">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Duration (minutes)</label>
+                <input class="form-input" id="tb-duration" type="number" min="1" value="30">
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Days</label>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+                <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="tb-day" value="0" checked> Sun</label>
+                <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="tb-day" value="1" checked> Mon</label>
+                <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="tb-day" value="2" checked> Tue</label>
+                <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="tb-day" value="3" checked> Wed</label>
+                <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="tb-day" value="4" checked> Thu</label>
+                <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="tb-day" value="5" checked> Fri</label>
+                <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="tb-day" value="6" checked> Sat</label>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Label (optional)</label>
+              <input class="form-input" id="tb-label" placeholder="e.g. Local News 6PM">
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal('modal-timeblock')">Cancel</button>
+            <button class="btn btn-primary" id="btn-save-timeblock">Save Block</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Add/Edit Stream Modal -->
         <div class="modal-box" style="max-width:500px">
           <div class="modal-header"><span class="modal-title" id="stream-modal-title">Add Stream</span><button class="modal-close" onclick="closeModal('modal-stream')">✕</button></div>
           <div class="modal-body">
