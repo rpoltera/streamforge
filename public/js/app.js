@@ -157,7 +157,7 @@ function showPage(name){
   pg.classList.add('active');
   document.getElementById('page-title').textContent=name.toUpperCase().replace('-',' ');
   document.querySelectorAll(`[data-page="${name}"]`).forEach(n=>n.classList.add('active'));
-  const h={dashboard:loadDashboard,libraries:loadLibraries,media:()=>loadMedia(1),channels:loadChannels,playout:loadPlayout,schedule:initSchedule,watch:loadWatch,'epg-import':loadEpgImport,'epg-browser':loadEpgBrowser,'ai-scheduler':loadAiScheduler,output:loadOutput,plex:loadSetupUrls,jellyfin:loadSetupUrls,settings:loadSettings};
+  const h={dashboard:loadDashboard,libraries:loadLibraries,media:()=>loadMedia(1),channels:loadChannels,playout:loadPlayout,schedule:initSchedule,watch:loadWatch,'epg-import':loadEpgImport,'epg-browser':loadEpgBrowser,'ai-scheduler':loadAiScheduler,output:loadOutput,plex:loadSetupUrls,jellyfin:loadSetupUrls,settings:loadSettings,streams:loadStreams};
   if(h[name])h[name]();
 }
 function openModal(id){document.getElementById(id).classList.add('open')}
@@ -684,6 +684,106 @@ function goToPlayout(id){
   loadPlayoutForChannel(id);
 }
 
+// ── Live Streams ──────────────────────────────────────────────────────────────
+let streams = [];
+let editingStreamId = null;
+
+async function loadStreams() {
+  streams = await API.get('/api/streams');
+  renderStreamsList();
+  populateStreamPicker();
+}
+
+function renderStreamsList() {
+  const el = document.getElementById('streams-list');
+  if (!el) return;
+  if (!streams.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📡</div><div class="empty-text">No streams yet. Add an IPTV or HDHomeRun stream URL.</div></div>';
+    return;
+  }
+  const groups = {};
+  streams.forEach(s => { const g = s.group||'Uncategorized'; if(!groups[g]) groups[g]=[]; groups[g].push(s); });
+  el.innerHTML = Object.entries(groups).map(([g, items]) => `
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header"><span class="card-title">${esc(g)}</span></div>
+      <div class="card-body" style="padding:0">
+        ${items.map(s => `
+          <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border)">
+            ${s.icon ? `<img src="${esc(s.icon)}" style="width:32px;height:32px;object-fit:contain;border-radius:4px" onerror="this.style.display='none'">` : '<div style="width:32px;height:32px;background:var(--bg3);border-radius:4px;display:flex;align-items:center;justify-content:center">📡</div>'}
+            <div style="flex:1">
+              <div style="font-weight:600">${esc(s.name)}</div>
+              <div style="font-size:12px;color:var(--text-muted);font-family:monospace">${esc(s.url)}</div>
+            </div>
+            <button class="btn btn-sm btn-secondary" onclick="editStream('${s.id}')">✏️</button>
+            <button class="btn btn-sm btn-danger" onclick="deleteStream('${s.id}')">🗑</button>
+          </div>`).join('')}
+      </div>
+    </div>`).join('');
+}
+
+function populateStreamPicker() {
+  const sel = document.getElementById('picker-stream-select');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Select a stream...</option>' +
+    streams.map(s => `<option value="${s.id}">${esc(s.name)}${s.group ? ` (${esc(s.group)})` : ''}</option>`).join('');
+}
+
+document.getElementById('btn-add-stream')?.addEventListener('click', () => {
+  editingStreamId = null;
+  document.getElementById('stream-modal-title').textContent = 'Add Stream';
+  document.getElementById('stream-name').value = '';
+  document.getElementById('stream-url').value = '';
+  document.getElementById('stream-group').value = '';
+  document.getElementById('stream-icon').value = '';
+  openModal('modal-stream');
+});
+
+document.getElementById('btn-save-stream')?.addEventListener('click', async () => {
+  const name  = document.getElementById('stream-name').value.trim();
+  const url   = document.getElementById('stream-url').value.trim();
+  const group = document.getElementById('stream-group').value.trim();
+  const icon  = document.getElementById('stream-icon').value.trim();
+  if (!name || !url) { notify('Name and URL are required', true); return; }
+  if (editingStreamId) {
+    await API.put(`/api/streams/${editingStreamId}`, { name, url, group, icon });
+  } else {
+    await API.post('/api/streams', { name, url, group, icon });
+  }
+  closeModal('modal-stream');
+  await loadStreams();
+  notify(editingStreamId ? 'Stream updated' : 'Stream added');
+});
+
+window.editStream = async (id) => {
+  const s = streams.find(s => s.id === id);
+  if (!s) return;
+  editingStreamId = id;
+  document.getElementById('stream-modal-title').textContent = 'Edit Stream';
+  document.getElementById('stream-name').value = s.name;
+  document.getElementById('stream-url').value = s.url;
+  document.getElementById('stream-group').value = s.group||'';
+  document.getElementById('stream-icon').value = s.icon||'';
+  openModal('modal-stream');
+};
+
+window.deleteStream = async (id) => {
+  if (!confirm('Delete this stream?')) return;
+  await API.del(`/api/streams/${id}`);
+  await loadStreams();
+  notify('Stream deleted');
+};
+
+document.getElementById('btn-add-stream-block')?.addEventListener('click', () => {
+  const streamId = document.getElementById('picker-stream-select').value;
+  const mins = parseInt(document.getElementById('picker-stream-duration').value) || 60;
+  if (!streamId) { notify('Select a stream first', true); return; }
+  const stream = streams.find(s => s.id === streamId);
+  if (!stream) return;
+  playoutQueue.push({ streamId, duration: mins * 60, _stream: stream });
+  renderPlayoutQueue();
+  notify(`Added ${stream.name} (${mins}min) to queue`);
+});
+
 // ── Playout Builder ───────────────────────────────────────────────────────────
 let playoutQueue=[];
 let currentPlayoutChannelId=null;
@@ -692,6 +792,7 @@ let pickerPage=1;
 async function loadPlayout(){
   loadChannels();
   loadPickerMedia(1);
+  loadStreams();
 }
 
 document.getElementById('playout-channel-select').addEventListener('change',e=>{
@@ -707,7 +808,13 @@ async function loadPlayoutForChannel(id){
   try{
     const ch=await API.get('/api/channels/'+id);
     const blocks=await API.get(`/api/channels/${id}/playout`);
-    playoutQueue=blocks.map(b=>({mediaId:b.mediaId,item:b.item}));
+    playoutQueue=blocks.map(b=>{
+      if(b.streamId){
+        const stream=b.stream||streams.find(s=>s.id===b.streamId);
+        return {streamId:b.streamId,duration:b.duration,_stream:stream};
+      }
+      return {mediaId:b.mediaId,item:b.item};
+    });
     if(ch.playoutStart){
       const d=new Date(ch.playoutStart);
       document.getElementById('playout-start-input').value=d.toISOString().slice(0,16);
@@ -721,17 +828,28 @@ async function loadPlayoutForChannel(id){
 
 function renderPlayoutQueue(){
   const el=document.getElementById('playout-queue');
-  const totalDur=playoutQueue.reduce((s,b)=>s+(b.item?.duration||0),0);
+  const totalDur=playoutQueue.reduce((s,b)=>s+(b.streamId?(b.duration||0):(b.item?.duration||0)),0);
   document.getElementById('playout-total-dur').textContent=playoutQueue.length?`${playoutQueue.length} items · ${fmtDur(totalDur)} loop`:'';
   if(!playoutQueue.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">▶️</div><div class="empty-text">Add media from the browser →</div></div>';return}
-  el.innerHTML=playoutQueue.map((b,i)=>`
-    <div class="playout-item" data-index="${i}">
+  el.innerHTML=playoutQueue.map((b,i)=>{
+    if(b.streamId){
+      const name=b._stream?.name||'Live Stream';
+      return `<div class="playout-item" data-index="${i}" style="border-left:3px solid var(--accent)">
+        <span class="playout-drag" title="Drag to reorder">⠿</span>
+        <span class="playout-num">${i+1}</span>
+        <span class="playout-title">📡 ${esc(name)}</span>
+        <span class="playout-dur">${fmtDur(b.duration||0)}</span>
+        <span class="playout-remove" onclick="removeFromQueue(${i})">✕</span>
+      </div>`;
+    }
+    return `<div class="playout-item" data-index="${i}">
       <span class="playout-drag" title="Drag to reorder">⠿</span>
       <span class="playout-num">${i+1}</span>
       <span class="playout-title" title="${esc(b.item?.title||b.mediaId)}">${b.item?`${b.item.season?`S${String(b.item.season).padStart(2,'0')}E${String(b.item.episode||0).padStart(2,'0')} — `:''}${esc(b.item.title)}`:'Unknown'}</span>
       <span class="playout-dur">${fmtDur(b.item?.duration||0)}</span>
       <span class="playout-remove" onclick="removeFromQueue(${i})">✕</span>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   initDragSort();
 }
 
@@ -754,7 +872,7 @@ document.getElementById('btn-playout-save').addEventListener('click',async()=>{
   const playoutStart=startVal?new Date(startVal).toISOString():null;
   try{
     await API.put(`/api/channels/${currentPlayoutChannelId}/playout`,{
-      playout:playoutQueue.map(b=>({mediaId:b.mediaId})),
+      playout:playoutQueue.map(b=>b.streamId?{streamId:b.streamId,duration:b.duration}:{mediaId:b.mediaId}),
       playoutStart,
     });
     notify('✅ Playout saved');
