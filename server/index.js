@@ -1911,7 +1911,6 @@ async function schedulesDirectRefresh() {
   if (!config.sdAutoUpdate || !config.sdUsername || !config.sdPassword || !config.sdLineupId) return;
   const SD_BASE = 'https://json.schedulesdirect.org/20141201';
   try {
-    const crypto = require('crypto');
     const sha1pwd = crypto.createHash('sha1').update(config.sdPassword).digest('hex');
     const tokenRes = await fetch(`${SD_BASE}/token`, {
       method: 'POST',
@@ -2050,7 +2049,6 @@ app.delete('/api/streams/:id', (req, res) => {
 
 // ── Schedules Direct proxy ────────────────────────────────────────────────────
 const SD_BASE = 'https://json.schedulesdirect.org/20141201';
-const crypto  = require('crypto');
 
 app.post('/api/sd/token', async (req, res) => {
   try {
