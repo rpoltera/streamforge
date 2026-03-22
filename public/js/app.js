@@ -1863,13 +1863,13 @@ async function loadEpgBrowser() {
     }
     epgData.channels = d.channels;
     document.getElementById('epg-browser-sub').textContent = `${d.sourceName} — ${d.channelCount} channels`;
-    renderEpgChannelList(d.channels, '');
+    renderEpgBrowserChannels(d.channels, '');
   } catch(e) { console.error(e); }
 }
 
-function renderEpgChannelList(channels, filter) {
+function renderEpgBrowserChannels(channels, filter) {
   const filtered = filter
-    ? channels.filter(c => c.name.toLowerCase().includes(filter.toLowerCase()) || c.id.toLowerCase().includes(filter.toLowerCase()))
+    ? channels.filter(c => (c.name||c.id).toLowerCase().includes(filter.toLowerCase()))
     : channels;
 
   const el = document.getElementById('epg-browser-content');
@@ -1924,8 +1924,8 @@ async function openEpgChannel(channelId, channelName) {
   } catch(e) { console.error(e); }
 }
 
-document.getElementById('epg-browser-search').addEventListener('input', e => {
-  renderEpgChannelList(epgData.channels, e.target.value);
+document.getElementById('epg-browser-search')?.addEventListener('input', e => {
+  renderEpgBrowserChannels(epgData.channels, e.target.value);
 });
 document.getElementById('epg-browser-date').addEventListener('change', loadEpgBrowser);
 document.getElementById('btn-epg-today').addEventListener('click', () => {
