@@ -22,13 +22,13 @@ async function sdAddLineup(lineupId, lineupName){
   } catch(e){ status.textContent = 'Error: ' + e.message; }
 }
 
+const DEFAULT_LOGO = 'https://raw.githubusercontent.com/rpoltera/streamforge/main/public/logo.png';
 function applyLogoUrl(url){
   const img = document.getElementById('app-logo-img');
   const fav = document.getElementById('app-favicon');
-  if(url && url.trim()){
-    if(img) img.src = url.trim();
-    if(fav) fav.href = url.trim();
-  }
+  const src = (url && url.trim()) ? url.trim() : DEFAULT_LOGO;
+  if(img) img.src = src;
+  if(fav) fav.href = src;
 }
 
 // ── Schedules Direct ──────────────────────────────────────────────────────────
