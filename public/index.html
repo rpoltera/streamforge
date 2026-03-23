@@ -315,6 +315,30 @@
 
         <!-- LEFT COLUMN -->
         <div>
+          <!-- License -->
+          <div class="card settings-card">
+            <div class="card-header"><span class="card-title">🔑 License</span></div>
+            <div class="card-body">
+              <div id="license-status-display" style="margin-bottom:16px;padding:14px;background:var(--bg3);border-radius:8px;display:flex;align-items:center;gap:12px">
+                <div style="font-size:1.5rem" id="lic-status-icon">⏳</div>
+                <div>
+                  <div style="font-weight:600" id="lic-status-title">Checking...</div>
+                  <div style="font-size:12px;color:var(--text-muted)" id="lic-status-sub"></div>
+                </div>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <input class="form-input" id="lic-settings-key" placeholder="Enter license key" style="flex:1;font-family:'Space Mono',monospace">
+                <button class="btn btn-primary" id="lic-settings-activate">Activate</button>
+              </div>
+              <div id="lic-settings-error" style="color:var(--danger);font-size:12px;margin-top:6px;display:none"></div>
+              <div style="margin-top:12px;font-size:12px;color:var(--text-muted)">
+                <a href="https://streamforge-iptv.lemonsqueezy.com/buy/912702" target="_blank" style="color:var(--accent)">Annual $25/yr</a>
+                &nbsp;·&nbsp;
+                <a href="https://streamforge-iptv.lemonsqueezy.com/buy/912714" target="_blank" style="color:var(--accent)">Lifetime $110</a>
+              </div>
+            </div>
+          </div>
+
           <!-- General -->
           <div class="card settings-card">
             <div class="card-header"><span class="card-title">General</span></div>
