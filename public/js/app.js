@@ -24,7 +24,7 @@
           const ribbon = document.createElement('div');
           ribbon.id = 'sf-trial-ribbon';
           ribbon.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:1000;background:linear-gradient(90deg,#0a2a1a,#0d3d24);border-bottom:1px solid var(--accent);padding:6px 16px;display:flex;align-items:center;justify-content:center;gap:12px;font-size:12px;color:var(--text2)';
-          ribbon.innerHTML = `<span>⏱ Trial: <strong style="color:var(--accent)">${lic.daysLeft} day${lic.daysLeft!==1?'s':''} remaining</strong></span><span>·</span><a href="https://github.com/rpoltera/streamforge" target="_blank" style="color:var(--accent)">Purchase license ($25/yr or $110 lifetime)</a><button onclick="this.parentElement.remove()" style="margin-left:8px;background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;line-height:1">✕</button>`;
+          ribbon.innerHTML = `<span>⏱ Trial: <strong style="color:var(--accent)">${lic.daysLeft} day${lic.daysLeft!==1?'s':''} remaining</strong></span><span>·</span><a href="https://streamforge-iptv.lemonsqueezy.com/buy/912702" target="_blank" style="color:var(--accent)">Annual $25/yr</a><span>·</span><a href="https://streamforge-iptv.lemonsqueezy.com/buy/912714" target="_blank" style="color:var(--accent)">Lifetime $110</a><button onclick="this.parentElement.remove()" style="margin-left:8px;background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;line-height:1">✕</button>`;
           document.body.prepend(ribbon);
         }
         return;
