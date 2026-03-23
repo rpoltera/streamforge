@@ -1452,6 +1452,8 @@ async function loadSettings(){
 
     // General
     document.getElementById('cfg-baseurl').value = cfg.baseUrl||'';
+    const lsEl = document.getElementById('cfg-ls-api-key');
+    if(lsEl) lsEl.value = cfg.lsApiKey||'';
     applyLogoUrl('');
 
     // AI provider
@@ -1565,6 +1567,7 @@ document.getElementById('btn-save-config').addEventListener('click',async()=>{
     await API.put('/api/config',{
       // General
       baseUrl:      document.getElementById('cfg-baseurl').value.trim(),
+      lsApiKey:     (document.getElementById('cfg-ls-api-key')||{value:''}).value.trim(),
       epgDaysAhead: parseInt(document.getElementById('cfg-days').value),
       // FFmpeg
       ffmpegPath:   document.getElementById('cfg-ffmpeg').value.trim(),
