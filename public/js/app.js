@@ -1,24 +1,21 @@
 'use strict';
 // ── License ───────────────────────────────────────────────────────────────────
 (async function initLicense() {
-  const overlay = document.getElementById('license-overlay');
-  const trialView = document.getElementById('lic-trial-view');
-  const expiredView = document.getElementById('lic-expired-view');
-  const banner = document.getElementById('lic-trial-banner');
-
   async function checkLicense() {
     try {
       const r = await fetch('/api/license');
+      if (!r.ok) return; // server error — don't block
       const lic = await r.json();
 
       if (lic.status === 'licensed') {
-        overlay.style.display = 'none';
+        const overlay = document.getElementById('license-overlay');
+        if (overlay) overlay.style.display = 'none';
         return;
       }
 
       if (lic.status === 'trial') {
-        overlay.style.display = 'none';
-        // Show dismissible trial banner at top
+        const overlay = document.getElementById('license-overlay');
+        if (overlay) overlay.style.display = 'none';
         const existing = document.getElementById('sf-trial-ribbon');
         if (!existing) {
           const ribbon = document.createElement('div');
@@ -30,35 +27,37 @@
         return;
       }
 
-      if (lic.status === 'expired') {
-        overlay.style.display = 'flex';
-        trialView.style.display = 'none';
-        expiredView.style.display = '';
-        return;
-      }
-
-      // First time — show trial offer
+      // expired or first time — show overlay
+      const overlay = document.getElementById('license-overlay');
+      if (!overlay) return;
       overlay.style.display = 'flex';
-      trialView.style.display = '';
-      expiredView.style.display = 'none';
+      const trialView = document.getElementById('lic-trial-view');
+      const expiredView = document.getElementById('lic-expired-view');
+      if (lic.status === 'expired') {
+        if (trialView) trialView.style.display = 'none';
+        if (expiredView) expiredView.style.display = '';
+      } else {
+        if (trialView) trialView.style.display = '';
+        if (expiredView) expiredView.style.display = 'none';
+      }
 
     } catch(e) {
       console.warn('License check failed:', e.message);
+      // On error, don't block — allow app to run
     }
   }
 
-  // Start trial button
   document.getElementById('lic-btn-trial')?.addEventListener('click', async () => {
     await fetch('/api/license/start-trial', { method: 'POST' });
-    overlay.style.display = 'none';
+    const overlay = document.getElementById('license-overlay');
+    if (overlay) overlay.style.display = 'none';
     checkLicense();
   });
 
-  // Activate buttons
   async function activate(inputId, errorId) {
     const key = document.getElementById(inputId)?.value.trim();
     const errEl = document.getElementById(errorId);
-    if (!key) { errEl.textContent = 'Enter a license key'; errEl.style.display = ''; return; }
+    if (!key) { if(errEl){errEl.textContent='Enter a license key';errEl.style.display='';} return; }
     try {
       const r = await fetch('/api/license/activate', {
         method: 'POST',
@@ -66,27 +65,24 @@
         body: JSON.stringify({ key }),
       });
       const d = await r.json();
-      if (!r.ok) { errEl.textContent = d.error || 'Invalid key'; errEl.style.display = ''; return; }
-      errEl.style.display = 'none';
-      overlay.style.display = 'none';
+      if (!r.ok) { if(errEl){errEl.textContent=d.error||'Invalid key';errEl.style.display='';} return; }
+      if(errEl) errEl.style.display = 'none';
+      const overlay = document.getElementById('license-overlay');
+      if (overlay) overlay.style.display = 'none';
       const ribbon = document.getElementById('sf-trial-ribbon');
       if (ribbon) ribbon.remove();
-      // Show success
       const msg = document.createElement('div');
-      msg.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:9998;background:var(--success);color:#000;padding:10px 24px;border-radius:8px;font-weight:600;font-size:14px';
+      msg.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:9998;background:var(--success,#00e676);color:#000;padding:10px 24px;border-radius:8px;font-weight:600;font-size:14px';
       msg.textContent = `✅ ${d.type === 'lifetime' ? 'Lifetime' : 'Annual'} license activated!`;
       document.body.appendChild(msg);
       setTimeout(() => msg.remove(), 4000);
     } catch(e) {
-      errEl.textContent = 'Activation failed: ' + e.message;
-      errEl.style.display = '';
+      if(errEl){errEl.textContent='Activation failed: '+e.message;errEl.style.display='';}
     }
   }
 
   document.getElementById('lic-btn-activate')?.addEventListener('click', () => activate('lic-key-input', 'lic-error'));
   document.getElementById('lic-btn-activate-exp')?.addEventListener('click', () => activate('lic-key-input-exp', 'lic-error-exp'));
-
-  // Enter key on input
   document.getElementById('lic-key-input')?.addEventListener('keydown', e => { if(e.key==='Enter') activate('lic-key-input','lic-error'); });
   document.getElementById('lic-key-input-exp')?.addEventListener('keydown', e => { if(e.key==='Enter') activate('lic-key-input-exp','lic-error-exp'); });
 
@@ -1450,6 +1446,30 @@ async function loadSettings(){
   try{
     const [cfg,status]=await Promise.all([API.get('/api/config'),API.get('/api/status')]);
 
+    // License status
+    try {
+      const lic = await API.get('/api/license');
+      const icon = document.getElementById('lic-status-icon');
+      const title = document.getElementById('lic-status-title');
+      const sub = document.getElementById('lic-status-sub');
+      if (lic.status === 'licensed') {
+        icon.textContent = '✅';
+        title.textContent = lic.type === 'lifetime' ? 'Lifetime License — Active' : 'Annual License — Active';
+        title.style.color = 'var(--success)';
+        sub.textContent = `Key: ${lic.key}`;
+      } else if (lic.status === 'trial') {
+        icon.textContent = '⏱';
+        title.textContent = `Free Trial — ${lic.daysLeft} day${lic.daysLeft!==1?'s':''} remaining`;
+        title.style.color = 'var(--accent)';
+        sub.textContent = 'Purchase a license to continue after trial';
+      } else {
+        icon.textContent = '⚠️';
+        title.textContent = 'Trial Expired';
+        title.style.color = 'var(--danger)';
+        sub.textContent = 'Enter a license key below to continue';
+      }
+    } catch(_) {}
+
     // General
     document.getElementById('cfg-baseurl').value = cfg.baseUrl||'';
     const lsEl = document.getElementById('cfg-ls-api-key');
@@ -1562,6 +1582,29 @@ function selectHw(id){
     el.classList.toggle('selected', el.dataset.hw===id);
   });
 }
+document.getElementById('lic-settings-activate')?.addEventListener('click', async () => {
+  const key = document.getElementById('lic-settings-key')?.value.trim();
+  const errEl = document.getElementById('lic-settings-error');
+  if (!key) { errEl.textContent = 'Enter a license key'; errEl.style.display = ''; return; }
+  try {
+    const r = await fetch('/api/license/activate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key }),
+    });
+    const d = await r.json();
+    if (!r.ok) { errEl.textContent = d.error || 'Invalid key'; errEl.style.display = ''; return; }
+    errEl.style.display = 'none';
+    document.getElementById('lic-settings-key').value = '';
+    notify(`✅ ${d.type === 'lifetime' ? 'Lifetime' : 'Annual'} license activated!`);
+    loadSettings(); // refresh status display
+    const overlay = document.getElementById('license-overlay');
+    if (overlay) overlay.style.display = 'none';
+    const ribbon = document.getElementById('sf-trial-ribbon');
+    if (ribbon) ribbon.remove();
+  } catch(e) { errEl.textContent = 'Failed: ' + e.message; errEl.style.display = ''; }
+});
+
 document.getElementById('btn-save-config').addEventListener('click',async()=>{
   try{
     await API.put('/api/config',{
