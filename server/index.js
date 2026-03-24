@@ -2056,6 +2056,23 @@ app.put('/api/channels/:id/timeblocks', (req, res) => {
   res.json(ch.timeBlocks);
 });
 
+// ── yt-dlp URL resolver ───────────────────────────────────────────────────────
+async function resolveStreamUrl(url) {
+  if (!url) return url;
+  const isWebPage = url && !url.match(/\.(m3u8|m3u|ts|mp4|mkv|flv)(\?|$)/i) &&
+    !url.includes(':5004') &&
+    url.match(/^https?:\/\//);
+  if (!isWebPage) return url;
+  try {
+    const resolved = execSync(
+      `/usr/local/bin/yt-dlp -g --no-playlist -f "best[ext=mp4]/best" "${url}" 2>/dev/null`,
+      { timeout: 15000 }
+    ).toString().trim().split('\n')[0];
+    if (resolved && resolved.startsWith('http')) return resolved;
+  } catch(_) {}
+  return url;
+}
+
 // ── Live Streams ──────────────────────────────────────────────────────────────
 app.get('/api/streams', (req, res) => res.json(db.streams));
 
@@ -2084,6 +2101,28 @@ app.get('/api/streams/:id/preview.m3u8', async (req, res) => {
   // Clean old segments
   try { fs.readdirSync(hlsDir).forEach(f => { try { fs.unlinkSync(path.join(hlsDir,f)); } catch(_){} }); } catch(_) {}
 
+  // Resolve web-based stream URLs (YouTube, Stirr, Pluto, etc.) via yt-dlp
+  let resolvedUrl = stream.url;
+  const isWebUrl = stream.url && !stream.url.match(/\.(m3u8|m3u|ts|mp4|mkv|flv)(\?|$)/i) &&
+    !stream.url.includes(':5004') && // HDHomeRun
+    stream.url.match(/^https?:\/\//);
+
+  if (isWebUrl) {
+    try {
+      const ytdlpPath = '/usr/local/bin/yt-dlp';
+      const resolved = execSync(
+        `"${ytdlpPath}" -g --no-playlist -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" "${stream.url}" 2>/dev/null`,
+        { timeout: 15000 }
+      ).toString().trim().split('\n')[0];
+      if (resolved && resolved.startsWith('http')) {
+        resolvedUrl = resolved;
+        console.log(`[preview] yt-dlp resolved: ${stream.url.slice(0,50)} → ${resolvedUrl.slice(0,60)}`);
+      }
+    } catch(e) {
+      console.log(`[preview] yt-dlp failed, trying direct: ${e.message.slice(0,100)}`);
+    }
+  }
+
   // Build FFmpeg args — maximally compatible input options
   const inputArgs = [
     '-y',
@@ -2091,7 +2130,7 @@ app.get('/api/streams/:id/preview.m3u8', async (req, res) => {
     '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
     '-allowed_extensions', 'ALL',
     '-protocol_whitelist', 'file,http,https,tcp,tls,crypto,hls,ftp,rtmp,udp',
-    '-i', stream.url,
+    '-i', resolvedUrl,
   ];
 
   // Output: copy streams if possible, transcode audio only if needed
