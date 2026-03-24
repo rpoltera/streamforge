@@ -2207,10 +2207,10 @@ async function startPreviewFFmpeg(streamId, streamUrl) {
     delete global._previewProcs[streamId];
     // Auto-restart if it dies unexpectedly (stream hiccup)
     if (code !== 0) {
-      console.log(`[preview] Stream ${streamId} died (code ${code}), restarting in 3s...`);
+      console.log(`[preview] Stream ${streamId} died (code ${code}), restarting in 2s...`);
       global._previewWatchdogs[streamId] = setTimeout(() => {
         startPreviewFFmpeg(streamId, streamUrl).catch(() => {});
-      }, 3000);
+      }, 2000);
     }
   });
 
