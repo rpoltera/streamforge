@@ -830,6 +830,28 @@ app.get('/api/hw-probe', (req, res) => {
   res.json({ current: config.hwAccel, options: results });
 });
 
+// ── Reset routes ──────────────────────────────────────────────────────────────
+app.post('/api/reset/channels', (req, res) => {
+  db.channels = [];
+  saveAll();
+  res.json({ ok: true });
+});
+
+app.post('/api/reset/playout', (req, res) => {
+  db.channels.forEach(ch => { ch.playout = []; ch.playoutStart = null; ch.liveStreamId = ''; });
+  saveAll();
+  res.json({ ok: true });
+});
+
+app.post('/api/reset/factory', (req, res) => {
+  db.channels = [];
+  db.libraries = [];
+  db.media = [];
+  db.epg = { channels: [], programs: [] };
+  saveAll();
+  res.json({ ok: true });
+});
+
 app.get('/api/config', (req, res) => res.json(config));
 app.put('/api/config', (req, res) => {
   [
