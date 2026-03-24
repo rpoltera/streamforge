@@ -849,7 +849,7 @@ async function loadChannels(){
         <div class="channel-num">${c.num}</div>
         <div class="channel-info">
           <div class="channel-name">${esc(c.name)}</div>
-          <div class="channel-meta">${esc(c.group||'No group')} · ${(c.playout||[]).length} items in playout</div>
+          <div class="channel-meta">${esc(c.group||'No group')} · ${c.liveStreamId ? '📡 24/7 Live Stream' : `${(c.playout||[]).length} items in playout`}</div>
         </div>
         <div class="channel-actions">
           <button class="btn btn-secondary btn-sm" onclick="openEditChannel('${c.id}')">Edit</button>
@@ -874,6 +874,8 @@ async function openEditChannel(id){
     document.getElementById('ch-name').value=c.name;
     document.getElementById('ch-group').value=c.group||'';
     document.getElementById('ch-logo').value=c.logo||'';
+    const lsSel=document.getElementById('ch-live-stream');
+    if(lsSel){lsSel.innerHTML='<option value="">— None (use playout queue) —</option>'+streams.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');lsSel.value=c.liveStreamId||'';}
     document.getElementById('modal-ch-title').innerHTML=`Edit Channel <span class="modal-close" data-close="modal-channel">✕</span>`;
     document.querySelector('#modal-ch-title .modal-close').addEventListener('click',()=>closeModal('modal-channel'));
     openModal('modal-channel');
@@ -883,7 +885,8 @@ async function openEditChannel(id){
 async function saveChannel(){
   const name=document.getElementById('ch-name').value.trim();
   if(!name){notify('Name required',true);return}
-  const payload={num:parseInt(document.getElementById('ch-num').value)||undefined,name,group:document.getElementById('ch-group').value.trim(),logo:document.getElementById('ch-logo').value.trim()};
+  const liveStreamId=(document.getElementById('ch-live-stream')||{value:''}).value;
+  const payload={num:parseInt(document.getElementById('ch-num').value)||undefined,name,group:document.getElementById('ch-group').value.trim(),logo:document.getElementById('ch-logo').value.trim(),liveStreamId};
   try{
     if(editingChId)await API.put('/api/channels/'+editingChId,payload);
     else await API.post('/api/channels',payload);
@@ -891,6 +894,7 @@ async function saveChannel(){
     editingChId=null;
     closeModal('modal-channel');
     ['ch-num','ch-name','ch-group','ch-logo'].forEach(id=>document.getElementById(id).value='');
+    const lsSelClear=document.getElementById('ch-live-stream');if(lsSelClear)lsSelClear.value='';
     loadChannels();checkStatus();
   }catch{notify('Save failed',true)}
 }
@@ -1018,8 +1022,19 @@ window.testStream = (id, name, url) => {
     });
     hls.on(Hls.Events.ERROR, (e, d) => {
       if (d.fatal) {
-        status.textContent = `❌ ${d.details}`;
-        status.style.color = 'var(--danger)';
+        if (d.type === Hls.ErrorTypes.NETWORK_ERROR && d.details === 'manifestLoadError') {
+          // Fetch the error message from the server
+          fetch(proxyUrl).then(r => r.json()).then(j => {
+            status.textContent = `❌ ${j.error || 'Stream unavailable'}`;
+            status.style.color = 'var(--danger)';
+          }).catch(() => {
+            status.textContent = `❌ Stream unavailable — check URL`;
+            status.style.color = 'var(--danger)';
+          });
+        } else {
+          status.textContent = `❌ ${d.details}`;
+          status.style.color = 'var(--danger)';
+        }
       }
     });
   } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
@@ -1732,8 +1747,18 @@ document.getElementById('btn-import-config').addEventListener('change',async e=>
 // ── Button wiring ─────────────────────────────────────────────────────────────
 document.getElementById('btn-add-library').addEventListener('click',()=>openModal('modal-library'));
 document.getElementById('btn-add-library-2').addEventListener('click',()=>openModal('modal-library'));
-document.getElementById('btn-add-channel').addEventListener('click',()=>{editingChId=null;openModal('modal-channel')});
-document.getElementById('btn-add-channel-2').addEventListener('click',()=>{editingChId=null;openModal('modal-channel')});
+document.getElementById('btn-add-channel').addEventListener('click',()=>{
+  editingChId=null;
+  const lsSel=document.getElementById('ch-live-stream');
+  if(lsSel){lsSel.innerHTML='<option value="">— None (use playout queue) —</option>'+streams.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');}
+  openModal('modal-channel');
+});
+document.getElementById('btn-add-channel-2').addEventListener('click',()=>{
+  editingChId=null;
+  const lsSel=document.getElementById('ch-live-stream');
+  if(lsSel){lsSel.innerHTML='<option value="">— None (use playout queue) —</option>'+streams.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');}
+  openModal('modal-channel');
+});
 document.getElementById('btn-save-channel').addEventListener('click',saveChannel);
 
 
