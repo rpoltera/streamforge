@@ -580,6 +580,28 @@ function resolveStreamSource(item) {
 
 // Returns { item, offsetSeconds, startTime, endTime } for what should be playing NOW
 function getPlayoutNow(channel, nowMs) {
+  // ── 24/7 live stream mode ─────────────────────────────────────────────────
+  if (channel.liveStreamId) {
+    const stream = db.streams.find(s => s.id === channel.liveStreamId);
+    if (stream) return {
+      item: null, stream, block: { streamId: channel.liveStreamId },
+      offsetSeconds: 0, startTime: nowMs, endTime: nowMs + 86400000,
+      isLive: true,
+    };
+  }
+  // ── 24/7 live stream passthrough (overrides everything) ──────────────────────
+  if (channel.liveStreamUrl) {
+    return {
+      item: null,
+      stream: { id: 'live', name: channel.name, url: channel.liveStreamUrl },
+      block: {},
+      offsetSeconds: 0,
+      startTime: nowMs,
+      endTime: nowMs + 86400000,
+      isLive: true,
+    };
+  }
+
   // ── Check scheduled time blocks first (they override the loop) ──────────────
   const blocks = channel.timeBlocks || [];
   if (blocks.length) {
@@ -677,6 +699,12 @@ function getPlayoutNow(channel, nowMs) {
 
 // Build full EPG schedule for a channel for the next N days
 function buildChannelSchedule(channel, fromMs, toMs) {
+  // 24/7 live stream mode
+  if (channel.liveStreamId) {
+    const stream = db.streams.find(s => s.id === channel.liveStreamId);
+    return [{ start: fromMs, end: toMs, title: stream ? `🔴 ${stream.name}` : '🔴 Live Stream', isLive: true }];
+  }
+
   const playout = channel.playout || [];
   if (!playout.length) return [];
 
@@ -972,13 +1000,15 @@ app.get('/api/channels', (req, res) => {
 });
 
 app.post('/api/channels', (req, res) => {
-  const { name, num, group, logo, epgChannelId } = req.body;
+  const { name, num, group, logo, epgChannelId, liveStreamId } = req.body;
   if (!name) return res.status(400).json({ error: 'name required' });
   const maxNum = db.channels.length ? Math.max(...db.channels.map(c => c.num)) : 0;
   const ch = {
     id: uuidv4(), num: parseInt(num) || maxNum + 1,
     name, group: group || '', logo: logo || '',
     epgChannelId: epgChannelId || '',
+    liveStreamId: liveStreamId || '',
+    liveStreamUrl: liveStreamUrl || '',
     playout: [], playoutStart: null,
     active: true, createdAt: new Date().toISOString(),
   };
@@ -995,7 +1025,7 @@ app.get('/api/channels/:id', (req, res) => {
 app.put('/api/channels/:id', (req, res) => {
   const idx = db.channels.findIndex(c => c.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'not found' });
-  ['name','num','group','logo','active','playout','playoutStart','epgChannelId'].forEach(k => {
+  ['name','num','group','logo','active','playout','playoutStart','epgChannelId','liveStreamId'].forEach(k => {
     if (req.body[k] !== undefined) db.channels[idx][k] = req.body[k];
   });
   saveAll();
