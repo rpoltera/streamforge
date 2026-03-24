@@ -991,45 +991,40 @@ window.testStream = (id, name, url) => {
   const status = document.getElementById('stream-test-status');
 
   title.textContent = `▶ ${name}`;
-  status.textContent = 'Connecting...';
+  status.textContent = '⏳ Starting stream (up to 12 seconds)...';
   status.style.color = 'var(--text-muted)';
   video.src = '';
   if (window._testHls) { window._testHls.destroy(); window._testHls = null; }
 
   modal.classList.add('open');
 
+  const proxyUrl = `/api/streams/${id}/preview.m3u8`;
+
   if (Hls.isSupported()) {
-    const hls = new Hls({ enableWorker: false, maxBufferLength: 10 });
+    const hls = new Hls({ enableWorker: false, maxBufferLength: 10, manifestLoadingTimeOut: 10000 });
     window._testHls = hls;
-    hls.loadSource(url);
+    hls.loadSource(proxyUrl);
     hls.attachMedia(video);
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
       video.play();
-      status.textContent = '✅ Playing';
-      status.style.color = 'var(--success)';
     });
     hls.on(Hls.Events.ERROR, (e, d) => {
       if (d.fatal) {
-        status.textContent = `❌ ${d.type}: ${d.details}`;
+        status.textContent = `❌ ${d.details}`;
         status.style.color = 'var(--danger)';
       }
     });
   } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-    video.src = url;
-    video.play().then(() => {
-      status.textContent = '✅ Playing';
-      status.style.color = 'var(--success)';
-    }).catch(e => {
-      status.textContent = `❌ ${e.message}`;
-      status.style.color = 'var(--danger)';
-    });
+    video.src = proxyUrl;
+    video.play();
   } else {
     status.textContent = '❌ HLS not supported in this browser';
     status.style.color = 'var(--danger)';
+    return;
   }
 
   video.onplaying = () => {
-    status.textContent = '✅ Playing';
+    status.textContent = '✅ Playing (proxied via FFmpeg)';
     status.style.color = 'var(--success)';
   };
   video.onerror = () => {
