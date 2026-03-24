@@ -2023,6 +2023,37 @@ app.put('/api/channels/:id/timeblocks', (req, res) => {
 // ── Live Streams ──────────────────────────────────────────────────────────────
 app.get('/api/streams', (req, res) => res.json(db.streams));
 
+// Stream proxy — transcodes audio to AAC for browser compatibility
+app.get('/api/streams/:id/preview', (req, res) => {
+  const stream = db.streams.find(s => s.id === req.params.id);
+  if (!stream) return res.status(404).send('Stream not found');
+
+  res.setHeader('Content-Type', 'video/mp2t');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Transfer-Encoding', 'chunked');
+
+  const args = [
+    '-re',
+    '-user_agent', 'StreamForge/2.0 FFmpeg',
+    '-i', stream.url,
+    '-map', '0:v:0?',
+    '-map', '0:a:0?',
+    '-vcodec', 'copy',
+    '-acodec', 'aac',
+    '-ab', '192k',
+    '-ar', '48000',
+    '-ac', '2',
+    '-f', 'mpegts',
+    '-'
+  ];
+
+  const ff = spawn(config.ffmpegPath, args, { stdio: ['ignore','pipe','pipe'] });
+  ff.stdout.pipe(res);
+  ff.stderr.on('data', d => console.log('[stream-preview]', d.toString().slice(0,100)));
+  req.on('close', () => ff.kill('SIGKILL'));
+  ff.on('exit', () => res.end());
+});
+
 app.post('/api/streams', (req, res) => {
   const { name, url, group, icon } = req.body;
   if (!name || !url) return res.status(400).json({ error: 'name and url required' });
