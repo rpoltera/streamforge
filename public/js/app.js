@@ -1001,7 +1001,15 @@ window.testStream = (id, name, url) => {
   const proxyUrl = `/api/streams/${id}/preview.m3u8`;
 
   if (Hls.isSupported()) {
-    const hls = new Hls({ enableWorker: false, maxBufferLength: 10, manifestLoadingTimeOut: 10000 });
+    const hls = new Hls({
+      enableWorker: false,
+      maxBufferLength: 10,
+      manifestLoadingTimeOut: 15000,
+      liveSyncDurationCount: 3,
+      liveMaxLatencyDurationCount: 6,
+      liveDurationInfinity: true,
+      startPosition: -1,  // start from live edge
+    });
     window._testHls = hls;
     hls.loadSource(proxyUrl);
     hls.attachMedia(video);
