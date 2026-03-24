@@ -17,6 +17,9 @@ if [[ "${1:-}" == "update" ]]; then
   [[ ! -d $INSTALL_DIR ]] && msg_error "No StreamForge found" && exit 1
   systemctl stop streamforge 2>/dev/null || true
   pkill -9 -f ffmpeg 2>/dev/null || true
+  msg_info "Updating yt-dlp"
+  curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp 2>/dev/null || true
+  chmod +x /usr/local/bin/yt-dlp 2>/dev/null || true
   msg_info "Downloading latest files"
   curl -fsSL "$REPO/server/index.js"     -o "$INSTALL_DIR/server/index.js"
   curl -fsSL "$REPO/server/package.json" -o "$INSTALL_DIR/server/package.json"
@@ -49,8 +52,13 @@ apt-get upgrade -y -qq
 msg_ok "Updated Container OS"
 
 msg_info "Installing Dependencies"
-apt-get install -y -qq curl wget ffmpeg nginx
+apt-get install -y -qq curl wget ffmpeg nginx python3
 msg_ok "Installed Dependencies"
+
+msg_info "Installing yt-dlp"
+curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
+chmod +x /usr/local/bin/yt-dlp
+msg_ok "Installed yt-dlp $(yt-dlp --version)"
 
 msg_info "Installing Node.js 20"
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash - &>/dev/null
