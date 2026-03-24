@@ -943,6 +943,7 @@ function renderStreamsList() {
               <div style="font-weight:600">${esc(s.name)}</div>
               <div style="font-size:12px;color:var(--text-muted);font-family:monospace">${esc(s.url)}</div>
             </div>
+            <button class="btn btn-sm btn-primary" onclick="testStream('${esc(s.id)}','${esc(s.name)}','${esc(s.url)}')">▶ Test</button>
             <button class="btn btn-sm btn-secondary" onclick="editStream('${s.id}')">✏️</button>
             <button class="btn btn-sm btn-danger" onclick="deleteStream('${s.id}')">🗑</button>
           </div>`).join('')}
@@ -982,6 +983,74 @@ document.getElementById('btn-save-stream')?.addEventListener('click', async () =
   await loadStreams();
   notify(editingStreamId ? 'Stream updated' : 'Stream added');
 });
+
+window.testStream = (id, name, url) => {
+  const modal = document.getElementById('modal-stream-test');
+  const title = document.getElementById('stream-test-title');
+  const video = document.getElementById('stream-test-video');
+  const status = document.getElementById('stream-test-status');
+
+  title.textContent = `▶ ${name}`;
+  status.textContent = 'Connecting...';
+  status.style.color = 'var(--text-muted)';
+  video.src = '';
+
+  modal.classList.add('open');
+
+  // Try HLS first, fall back to native
+  if (url.includes('.m3u8') || url.includes('m3u8') || Hls.isSupported()) {
+    if (Hls.isSupported()) {
+      if (window._testHls) { window._testHls.destroy(); }
+      const hls = new Hls({ enableWorker: false });
+      window._testHls = hls;
+      hls.loadSource(url);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        video.play();
+        status.textContent = '✅ Playing';
+        status.style.color = 'var(--success)';
+      });
+      hls.on(Hls.Events.ERROR, (e, d) => {
+        if (d.fatal) {
+          status.textContent = `❌ Error: ${d.details}`;
+          status.style.color = 'var(--danger)';
+        }
+      });
+    } else {
+      video.src = url;
+      video.play().then(() => {
+        status.textContent = '✅ Playing';
+        status.style.color = 'var(--success)';
+      }).catch(e => {
+        status.textContent = `❌ ${e.message}`;
+        status.style.color = 'var(--danger)';
+      });
+    }
+  } else {
+    video.src = url;
+    video.play().then(() => {
+      status.textContent = '✅ Playing';
+      status.style.color = 'var(--success)';
+    }).catch(e => {
+      status.textContent = `❌ ${e.message}`;
+      status.style.color = 'var(--danger)';
+    });
+  }
+
+  video.onerror = () => {
+    status.textContent = '❌ Stream error — check URL or network';
+    status.style.color = 'var(--danger)';
+  };
+};
+
+window.closeStreamTest = () => {
+  const modal = document.getElementById('modal-stream-test');
+  const video = document.getElementById('stream-test-video');
+  modal.classList.remove('open');
+  video.pause();
+  video.src = '';
+  if (window._testHls) { window._testHls.destroy(); window._testHls = null; }
+};
 
 window.editStream = async (id) => {
   const s = streams.find(s => s.id === id);
