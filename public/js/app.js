@@ -1075,10 +1075,24 @@ window.testStream = (id, name, url) => {
     hls.on(Hls.Events.ERROR, (e, d) => {
       if (d.fatal) {
         if (d.type === Hls.ErrorTypes.NETWORK_ERROR) {
-          // Try to recover
           status.textContent = '⚠️ Network issue — recovering...';
           status.style.color = 'orange';
+          // Try network recovery first
           hls.startLoad();
+          // If still broken after 4s, fully reload the source
+          clearTimeout(window._testHlsRecovery);
+          window._testHlsRecovery = setTimeout(() => {
+            console.log('[player] Full reload recovery');
+            hls.stopLoad();
+            hls.detachMedia();
+            hls.loadSource(proxyUrl);
+            hls.attachMedia(video);
+            video.play().catch(() => {});
+          }, 4000);
+        } else if (d.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          status.textContent = '⚠️ Media error — recovering...';
+          status.style.color = 'orange';
+          hls.recoverMediaError();
         } else {
           fetch(proxyUrl).then(r => r.json()).then(j => {
             status.textContent = `❌ ${j.error || d.details}`;
@@ -1088,6 +1102,9 @@ window.testStream = (id, name, url) => {
             status.style.color = 'var(--danger)';
           });
         }
+      } else if (d.type === Hls.ErrorTypes.NETWORK_ERROR) {
+        // Non-fatal network errors — just log and continue
+        console.log('[player] Non-fatal network error:', d.details);
       }
     });
   } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
@@ -1119,6 +1136,7 @@ window.closeStreamTest = () => {
   modal.classList.remove('open');
   video.pause();
   video.src = '';
+  clearTimeout(window._testHlsRecovery);
   if (window._testHls) { window._testHls.destroy(); window._testHls = null; }
   if (window._currentStreamId) {
     fetch(`/api/streams/${window._currentStreamId}/stop`, { method: 'POST' }).catch(() => {});
