@@ -1000,7 +1000,7 @@ app.get('/api/channels', (req, res) => {
 });
 
 app.post('/api/channels', (req, res) => {
-  const { name, num, group, logo, epgChannelId, liveStreamId } = req.body;
+  const { name, num, group, logo, epgChannelId, liveStreamId, liveStreamUrl } = req.body;
   if (!name) return res.status(400).json({ error: 'name required' });
   const maxNum = db.channels.length ? Math.max(...db.channels.map(c => c.num)) : 0;
   const ch = {
@@ -1008,7 +1008,6 @@ app.post('/api/channels', (req, res) => {
     name, group: group || '', logo: logo || '',
     epgChannelId: epgChannelId || '',
     liveStreamId: liveStreamId || '',
-    liveStreamUrl: liveStreamUrl || '',
     playout: [], playoutStart: null,
     active: true, createdAt: new Date().toISOString(),
   };
@@ -2117,6 +2116,18 @@ async function resolveStreamUrl(url) {
 }
 
 // ── Live Streams ──────────────────────────────────────────────────────────────
+app.post('/api/streams/resolve', async (req, res) => {
+  const { url } = req.body;
+  if (!url) return res.status(400).json({ error: 'URL required' });
+  try {
+    const resolved = await resolveStreamUrl(url);
+    if (resolved === url) return res.status(400).json({ error: 'Could not extract a direct stream URL from this page. Try using the browser F12 → Network tab to find the .m3u8 URL manually.' });
+    res.json({ url: resolved });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/streams', (req, res) => res.json(db.streams));
 
 // Universal stream preview — handles HLS, MPEG-TS, RTMP, HTTP, SMIL etc.
