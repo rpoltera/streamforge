@@ -1078,7 +1078,24 @@
 </div>
 
 <div class="notif" id="notif"></div>
-<!-- LICENSE MODAL -->
+<!-- Stream Test Player Modal -->
+<div class="modal-overlay" id="modal-stream-test">
+  <div class="modal" style="max-width:720px;width:95vw">
+    <div class="modal-header">
+      <span class="modal-title" id="stream-test-title">Test Stream</span>
+      <button class="modal-close" onclick="closeStreamTest()">✕</button>
+    </div>
+    <div style="background:#000;border-radius:8px;overflow:hidden;margin-bottom:12px">
+      <video id="stream-test-video" controls style="width:100%;max-height:400px;display:block" playsinline></video>
+    </div>
+    <div id="stream-test-status" style="font-size:13px;color:var(--text-muted);text-align:center;margin-bottom:8px">Ready</div>
+    <div style="text-align:center">
+      <button class="btn btn-secondary" onclick="closeStreamTest()">Close</button>
+    </div>
+  </div>
+</div>
+
+
 <div id="license-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:9999;align-items:center;justify-content:center;flex-direction:column">
   <div style="background:var(--bg2);border:1px solid var(--border);border-radius:16px;width:520px;max-width:95vw;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.8)">
     <!-- Header -->
