@@ -2038,8 +2038,25 @@ app.get('/api/streams/:id/preview.m3u8', async (req, res) => {
   const hlsDir = path.join(config.dataDir, 'hls', `preview_${req.params.id}`);
   fs.mkdirSync(hlsDir, { recursive: true });
 
-  // Kill any existing preview process
   if (!global._previewProcs) global._previewProcs = {};
+
+  // If already running and m3u8 exists, just serve fresh playlist
+  const m3u8Path = path.join(hlsDir, 'index.m3u8');
+  if (global._previewProcs[req.params.id] && fs.existsSync(m3u8Path) && fs.statSync(m3u8Path).size > 0) {
+    let content = fs.readFileSync(m3u8Path, 'utf8');
+    content = content.split('\n').map(line => {
+      const t = line.trim();
+      if (t.endsWith('.ts') && !t.startsWith('#') && !t.startsWith('http') && !t.startsWith('/')) {
+        return `/hls/preview_${req.params.id}/${t}`;
+      }
+      return line;
+    }).join('\n');
+    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+    res.setHeader('Cache-Control', 'no-cache, no-store');
+    return res.send(content);
+  }
+
+  // Kill any existing preview process
   if (global._previewProcs[req.params.id]) {
     try { global._previewProcs[req.params.id].kill('SIGKILL'); } catch(_) {}
     delete global._previewProcs[req.params.id];
@@ -2048,7 +2065,6 @@ app.get('/api/streams/:id/preview.m3u8', async (req, res) => {
   // Clean old segments
   try { fs.readdirSync(hlsDir).forEach(f => { try { fs.unlinkSync(path.join(hlsDir,f)); } catch(_){} }); } catch(_) {}
 
-  const m3u8Path = path.join(hlsDir, 'index.m3u8');
   const args = [
     '-y',
     '-user_agent', 'Mozilla/5.0 StreamForge/2.0',
@@ -2081,18 +2097,18 @@ app.get('/api/streams/:id/preview.m3u8', async (req, res) => {
     return res.status(502).json({ error: 'Stream failed to start — check URL' });
   }
 
-  // Serve m3u8 with absolute segment URLs
+  // Serve m3u8 fresh on every request (live playlist keeps updating)
+  res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+  res.setHeader('Cache-Control', 'no-cache, no-store');
+
   let content = fs.readFileSync(m3u8Path, 'utf8');
-  // Replace any relative .ts filenames with full paths
   content = content.split('\n').map(line => {
-    if (line.trim().endsWith('.ts') && !line.startsWith('#') && !line.startsWith('http')) {
-      const basename = path.basename(line.trim());
-      return `/hls/preview_${req.params.id}/${basename}`;
+    const t = line.trim();
+    if (t.endsWith('.ts') && !t.startsWith('#') && !t.startsWith('http') && !t.startsWith('/')) {
+      return `/hls/preview_${req.params.id}/${t}`;
     }
     return line;
   }).join('\n');
-  res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
-  res.setHeader('Cache-Control', 'no-cache');
   res.send(content);
 });
 
