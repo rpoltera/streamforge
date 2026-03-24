@@ -2075,7 +2075,7 @@ app.get('/api/streams/:id/preview.m3u8', async (req, res) => {
     '-af', 'aresample=async=1:first_pts=0',
     '-f', 'hls',
     '-hls_time', '2',
-    '-hls_list_size', '6',
+    '-hls_list_size', '10',
     '-hls_flags', 'delete_segments+append_list',
     '-hls_segment_filename', path.join(hlsDir, 'seg%03d.ts'),
     m3u8Path,
