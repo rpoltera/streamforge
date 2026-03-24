@@ -2152,6 +2152,96 @@ app.post('/api/streams/resolve', async (req, res) => {
 
 app.get('/api/streams', (req, res) => res.json(db.streams));
 
+// ── Stream preview engine ─────────────────────────────────────────────────────
+// Pre-warms a stream so it's ready instantly when the player opens
+if (!global._previewProcs) global._previewProcs = {};
+if (!global._previewWatchdogs) global._previewWatchdogs = {};
+
+async function startPreviewFFmpeg(streamId, streamUrl) {
+  const hlsDir = path.join(config.dataDir, 'hls', `preview_${streamId}`);
+  fs.mkdirSync(hlsDir, { recursive: true });
+  const m3u8Path = path.join(hlsDir, 'index.m3u8');
+
+  // Kill existing
+  if (global._previewProcs[streamId]) {
+    try { global._previewProcs[streamId].kill('SIGKILL'); } catch(_) {}
+    delete global._previewProcs[streamId];
+  }
+  if (global._previewWatchdogs[streamId]) {
+    clearTimeout(global._previewWatchdogs[streamId]);
+    delete global._previewWatchdogs[streamId];
+  }
+
+  // Clean old segments
+  try { fs.readdirSync(hlsDir).forEach(f => { try { fs.unlinkSync(path.join(hlsDir,f)); } catch(_){} }); } catch(_) {}
+
+  const args = [
+    '-y',
+    '-loglevel', 'warning',
+    '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+    '-allowed_extensions', 'ALL',
+    '-protocol_whitelist', 'file,http,https,tcp,tls,crypto,hls,ftp,rtmp,udp',
+    // Larger input buffer to handle network jitter
+    '-analyzeduration', '2000000',
+    '-probesize', '2000000',
+    '-i', streamUrl,
+    '-map', '0:v:0?',
+    '-map', '0:a:0?',
+    '-vcodec', 'copy',
+    '-acodec', 'aac', '-b:a', '192k', '-ar', '48000', '-ac', '2',
+    '-f', 'hls',
+    '-hls_time', '4',           // 4s segments — more resilient than 2s
+    '-hls_list_size', '12',     // Keep 12 segments = 48s of buffer
+    '-hls_flags', 'delete_segments+append_list+independent_segments',
+    '-hls_segment_type', 'mpegts',
+    '-hls_segment_filename', path.join(hlsDir, 'seg%06d.ts'),
+    m3u8Path,
+  ];
+
+  const ff = spawn(config.ffmpegPath, args, { stdio: ['ignore','ignore','pipe'] });
+  global._previewProcs[streamId] = ff;
+
+  let ffErr = '';
+  ff.stderr.on('data', d => { ffErr += d.toString().slice(-3000); });
+  ff.on('exit', (code) => {
+    delete global._previewProcs[streamId];
+    // Auto-restart if it dies unexpectedly (stream hiccup)
+    if (code !== 0) {
+      console.log(`[preview] Stream ${streamId} died (code ${code}), restarting in 3s...`);
+      global._previewWatchdogs[streamId] = setTimeout(() => {
+        startPreviewFFmpeg(streamId, streamUrl).catch(() => {});
+      }, 3000);
+    }
+  });
+
+  return { ff, m3u8Path, hlsDir, ffErr: () => ffErr };
+}
+
+// Pre-warm endpoint — call this to start buffering before player opens
+app.post('/api/streams/:id/warm', async (req, res) => {
+  const stream = db.streams.find(s => s.id === req.params.id);
+  if (!stream) return res.status(404).json({ error: 'not found' });
+  if (global._previewProcs[req.params.id]) return res.json({ ok: true, status: 'already running' });
+  try {
+    const url = await resolveStreamUrl(stream.url);
+    await startPreviewFFmpeg(req.params.id, url);
+    res.json({ ok: true, status: 'started' });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Stop preview
+app.post('/api/streams/:id/stop', (req, res) => {
+  if (global._previewProcs[req.params.id]) {
+    try { global._previewProcs[req.params.id].kill('SIGKILL'); } catch(_) {}
+    delete global._previewProcs[req.params.id];
+  }
+  if (global._previewWatchdogs[req.params.id]) {
+    clearTimeout(global._previewWatchdogs[req.params.id]);
+    delete global._previewWatchdogs[req.params.id];
+  }
+  res.json({ ok: true });
+});
+
 // Universal stream preview — handles HLS, MPEG-TS, RTMP, HTTP, SMIL etc.
 app.get('/api/streams/:id/preview.m3u8', async (req, res) => {
   const stream = db.streams.find(s => s.id === req.params.id);
@@ -2168,68 +2258,16 @@ app.get('/api/streams/:id/preview.m3u8', async (req, res) => {
     return servePlaylist(res, m3u8Path, req.params.id);
   }
 
-  // Kill stale process
-  if (global._previewProcs[req.params.id]) {
-    try { global._previewProcs[req.params.id].kill('SIGKILL'); } catch(_) {}
-    delete global._previewProcs[req.params.id];
-  }
-
-  // Clean old segments
-  try { fs.readdirSync(hlsDir).forEach(f => { try { fs.unlinkSync(path.join(hlsDir,f)); } catch(_){} }); } catch(_) {}
-
-  // Resolve web-based stream URLs via yt-dlp / service APIs
+  // Resolve URL and start FFmpeg
   let resolvedUrl;
   try {
     resolvedUrl = await resolveStreamUrl(stream.url);
-    if (resolvedUrl !== stream.url) console.log(`[preview] resolved: ${stream.url.slice(0,50)} → ${resolvedUrl.slice(0,60)}`);
-  } catch(e) {
-    resolvedUrl = stream.url;
-  }
+    if (resolvedUrl !== stream.url) console.log(`[preview] resolved: ${stream.url.slice(0,50)}`);
+  } catch(e) { resolvedUrl = stream.url; }
 
-  // Build FFmpeg args — maximally compatible input options
-  const inputArgs = [
-    '-y',
-    '-loglevel', 'warning',
-    '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
-    '-allowed_extensions', 'ALL',
-    '-protocol_whitelist', 'file,http,https,tcp,tls,crypto,hls,ftp,rtmp,udp',
-    '-i', resolvedUrl,
-  ];
+  const { ff, ffErr } = await startPreviewFFmpeg(req.params.id, resolvedUrl);
 
-  // Output: copy streams if possible, transcode audio only if needed
-  const outputArgs = [
-    '-map', '0:v:0?',
-    '-map', '0:a:0?',
-    '-vcodec', 'copy',
-    // Auto-detect audio — copy if AAC, transcode if AC3/MP3/other
-    '-acodec', 'aac',
-    '-b:a', '192k',
-    '-ar', '48000',
-    '-ac', '2',
-    '-f', 'hls',
-    '-hls_time', '2',
-    '-hls_list_size', '10',
-    '-hls_flags', 'delete_segments+append_list+independent_segments',
-    '-hls_segment_type', 'mpegts',
-    '-hls_segment_filename', path.join(hlsDir, 'seg%03d.ts'),
-    m3u8Path,
-  ];
-
-  const args = [...inputArgs, ...outputArgs];
-  const ff = spawn(config.ffmpegPath, args, { stdio: ['ignore','ignore','pipe'] });
-  global._previewProcs[req.params.id] = ff;
-
-  let ffErr = '';
-  ff.stderr.on('data', d => { ffErr += d.toString().slice(-2000); });
-  ff.on('exit', code => {
-    delete global._previewProcs[req.params.id];
-    if (code !== 0 && !res.headersSent) {
-      const errMsg = ffErr.split('\n').filter(l => l.includes('Error') || l.includes('error') || l.includes('Invalid') || l.includes('No such')).slice(-3).join(' | ');
-      res.status(502).json({ error: errMsg || 'Stream failed — check URL' });
-    }
-  });
-
-  // Wait for segments
+  // Wait for segments — up to 15s
   let waited = 0;
   while (waited < 15000) {
     await new Promise(r => setTimeout(r, 400));
@@ -2243,33 +2281,14 @@ app.get('/api/streams/:id/preview.m3u8', async (req, res) => {
   if (!fs.existsSync(m3u8Path) || fs.statSync(m3u8Path).size === 0) {
     try { ff.kill('SIGKILL'); } catch(_) {}
     if (!res.headersSent) {
-      const errMsg = ffErr.split('\n').filter(l => l.includes('Error') || l.includes('error') || l.includes('No such') || l.includes('403') || l.includes('404')).slice(-3).join(' | ');
-      return res.status(502).json({ error: errMsg || 'Stream failed to start — check URL' });
+      const err = ffErr().split('\n').filter(l => /error|failed|invalid|no such|403|404/i.test(l)).slice(-3).join(' | ');
+      return res.status(502).json({ error: err || 'Stream failed to start — check URL' });
     }
     return;
   }
 
   return servePlaylist(res, m3u8Path, req.params.id);
 });
-
-function servePlaylist(res, m3u8Path, streamId) {
-  try {
-    let content = fs.readFileSync(m3u8Path, 'utf8');
-    content = content.split('\n').map(line => {
-      const t = line.trim();
-      if (t && !t.startsWith('#') && !t.startsWith('http') && !t.startsWith('/') && t.endsWith('.ts')) {
-        return `/hls/preview_${streamId}/${t}`;
-      }
-      return line;
-    }).join('\n');
-    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
-    res.setHeader('Cache-Control', 'no-cache, no-store');
-    res.send(content);
-  } catch(e) {
-    if (!res.headersSent) res.status(500).json({ error: e.message });
-  }
-}
-
 app.get('/api/streams/:id/preview', (req, res) => {
   res.redirect(`/api/streams/${req.params.id}/preview.m3u8`);
 });
