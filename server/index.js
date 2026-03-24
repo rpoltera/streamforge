@@ -2414,9 +2414,11 @@ function xcAuth(req) {
   return u === xcUser && p === xcPass;
 }
 
-function xcUserInfo() {
+function xcUserInfo(req) {
   const xcUser = config.xcUser || 'streamforge';
   const xcPass = config.xcPass || 'streamforge';
+  const host = req.hostname || (config.baseUrl.replace(/https?:\/\//, '').split(':')[0]);
+  const port = String(req.socket?.localPort || config.port || 8080);
   return {
     user_info: {
       username: xcUser, password: xcPass,
@@ -2427,8 +2429,8 @@ function xcUserInfo() {
       allowed_output_formats: ['m3u8', 'ts'],
     },
     server_info: {
-      url: config.baseUrl.replace(/https?:\/\//, '').split(':')[0],
-      port: String(config.port || 8080),
+      url: host,
+      port,
       https_port: '',
       server_protocol: 'http',
       rtmp_port: '',
@@ -2444,7 +2446,7 @@ app.all('/player_api.php', (req, res) => {
   if (!xcAuth(req)) return res.json({ user_info: { auth: 0 } });
   const action = req.query.action || req.body?.action;
 
-  if (!action) return res.json(xcUserInfo());
+  if (!action) return res.json(xcUserInfo(req));
 
   if (action === 'get_live_categories') {
     const groups = [...new Set(db.channels.map(c => c.group || 'General').filter(Boolean))];
@@ -2491,7 +2493,7 @@ app.all('/player_api.php', (req, res) => {
     });
   }
 
-  return res.json(xcUserInfo());
+  return res.json(xcUserInfo(req));
 });
 
 // Stream delivery — /live/user/pass/streamId.ts or .m3u8
