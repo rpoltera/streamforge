@@ -997,37 +997,32 @@ window.testStream = (id, name, url) => {
 
   modal.classList.add('open');
 
-  // Try HLS first, fall back to native
-  if (url.includes('.m3u8') || url.includes('m3u8') || Hls.isSupported()) {
-    if (Hls.isSupported()) {
-      if (window._testHls) { window._testHls.destroy(); }
-      const hls = new Hls({ enableWorker: false });
-      window._testHls = hls;
-      hls.loadSource(url);
-      hls.attachMedia(video);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        video.play();
-        status.textContent = '✅ Playing';
-        status.style.color = 'var(--success)';
-      });
-      hls.on(Hls.Events.ERROR, (e, d) => {
-        if (d.fatal) {
+  // Use server proxy to handle audio transcoding (AC3/EAC3 → AAC)
+  const proxyUrl = `/api/streams/${id}/preview`;
+
+  if (Hls.isSupported()) {
+    if (window._testHls) { window._testHls.destroy(); }
+    const hls = new Hls({ enableWorker: false });
+    window._testHls = hls;
+    hls.loadSource(proxyUrl);
+    hls.attachMedia(video);
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      video.play();
+      status.textContent = '✅ Playing (audio transcoded to AAC)';
+      status.style.color = 'var(--success)';
+    });
+    hls.on(Hls.Events.ERROR, (e, d) => {
+      if (d.fatal) {
+        // Fall back to native
+        video.src = proxyUrl;
+        video.play().catch(() => {
           status.textContent = `❌ Error: ${d.details}`;
           status.style.color = 'var(--danger)';
-        }
-      });
-    } else {
-      video.src = url;
-      video.play().then(() => {
-        status.textContent = '✅ Playing';
-        status.style.color = 'var(--success)';
-      }).catch(e => {
-        status.textContent = `❌ ${e.message}`;
-        status.style.color = 'var(--danger)';
-      });
-    }
+        });
+      }
+    });
   } else {
-    video.src = url;
+    video.src = proxyUrl;
     video.play().then(() => {
       status.textContent = '✅ Playing';
       status.style.color = 'var(--success)';
@@ -1036,6 +1031,11 @@ window.testStream = (id, name, url) => {
       status.style.color = 'var(--danger)';
     });
   }
+
+  video.onplaying = () => {
+    status.textContent = '✅ Playing (audio transcoded to AAC)';
+    status.style.color = 'var(--success)';
+  };
 
   video.onerror = () => {
     status.textContent = '❌ Stream error — check URL or network';
