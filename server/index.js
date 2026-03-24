@@ -266,7 +266,12 @@ try {
   }));
 } catch (_) { app.use(morgan('dev')); }
 app.use(express.static(path.join(__dirname, '../public')));
-app.use('/hls', express.static(path.join(config.dataDir, 'hls'), { maxAge: 0 }));
+
+// HLS segments — serve dynamically so config.dataDir is resolved at request time
+app.use('/hls', (req, res, next) => {
+  const hlsBase = path.join(config.dataDir, 'hls');
+  express.static(hlsBase, { maxAge: 0 })(req, res, next);
+});
 
 // ── License routes ────────────────────────────────────────────────────────────
 app.get('/api/license', (req, res) => res.json(getLicenseStatus()));
@@ -2076,9 +2081,16 @@ app.get('/api/streams/:id/preview.m3u8', async (req, res) => {
     return res.status(502).json({ error: 'Stream failed to start — check URL' });
   }
 
-  // Rewrite m3u8 to use absolute URLs for segments
+  // Serve m3u8 with absolute segment URLs
   let content = fs.readFileSync(m3u8Path, 'utf8');
-  content = content.replace(/seg(\d+)\.ts/g, `/hls/preview_${req.params.id}/seg$1.ts`);
+  // Replace any relative .ts filenames with full paths
+  content = content.split('\n').map(line => {
+    if (line.trim().endsWith('.ts') && !line.startsWith('#') && !line.startsWith('http')) {
+      const basename = path.basename(line.trim());
+      return `/hls/preview_${req.params.id}/${basename}`;
+    }
+    return line;
+  }).join('\n');
   res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
   res.setHeader('Cache-Control', 'no-cache');
   res.send(content);
