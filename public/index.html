@@ -200,6 +200,16 @@
     <!-- OUTPUT -->
     <div class="page" id="page-output">
       <div class="card" style="margin-bottom:20px">
+        <div class="card-header"><span class="card-title">📺 Xtream Codes Connection</span></div>
+        <div class="card-body">
+          <p style="font-size:.85rem;color:var(--text2);margin-bottom:12px">Use these details in TiviMate, IPTV Smarters, OTT Navigator, and any Xtream-compatible player.</p>
+          <div class="form-group"><label class="form-label">Server URL</label><div class="input-row"><input class="form-input" id="out-xc-url" readonly style="flex:1"><button class="btn btn-primary btn-sm" data-copy="out-xc-url">Copy</button></div></div>
+          <div class="form-group"><label class="form-label">Username</label><div class="input-row"><input class="form-input" id="out-xc-user" readonly style="flex:1"><button class="btn btn-primary btn-sm" data-copy="out-xc-user">Copy</button></div></div>
+          <div class="form-group"><label class="form-label">Password</label><div class="input-row"><input class="form-input" id="out-xc-pass" readonly style="flex:1"><button class="btn btn-primary btn-sm" data-copy="out-xc-pass">Copy</button></div></div>
+          <div class="form-hint">Change username/password in Settings → General.</div>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:20px">
         <div class="card-header"><span class="card-title">M3U Playlist</span></div>
         <div class="card-body">
           <p style="font-size:.85rem;color:var(--text2);margin-bottom:12px">The M3U contains your channels with their live stream URLs. Add this to any IPTV player.</p>
@@ -345,6 +355,8 @@
             <div class="card-body">
               <div class="form-group"><label class="form-label">Base URL</label><input class="form-input" id="cfg-baseurl" type="text" placeholder="http://192.168.1.x:8080"><div class="form-hint">URL used in M3U and XMLTV output links</div></div>
               <div class="form-group"><label class="form-label">Lemon Squeezy API Key</label><input class="form-input" id="cfg-ls-api-key" type="password" placeholder="eyJ0eXAi..."><div class="form-hint">Required to validate license keys. Get it from your Lemon Squeezy dashboard → Settings → API.</div></div>
+              <div class="form-group"><label class="form-label">Xtream Username</label><input class="form-input" id="cfg-xc-user" type="text" placeholder="streamforge"><div class="form-hint">Username for Xtream Codes compatible players (TiviMate, IPTV Smarters, etc.)</div></div>
+              <div class="form-group"><label class="form-label">Xtream Password</label><input class="form-input" id="cfg-xc-pass" type="text" placeholder="streamforge"><div class="form-hint">Password for Xtream Codes compatible players.</div></div>
               <div class="form-group"><label class="form-label">EPG Days Ahead</label><input class="form-input" id="cfg-days" type="number" min="1" max="30" style="width:100px"></div>
               
             </div>
