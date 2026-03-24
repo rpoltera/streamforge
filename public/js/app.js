@@ -1036,45 +1036,57 @@ window.testStream = (id, name, url) => {
   const status = document.getElementById('stream-test-status');
 
   title.textContent = `▶ ${name}`;
-  status.textContent = '⏳ Starting stream (up to 12 seconds)...';
+  status.textContent = '⏳ Buffering stream...';
   status.style.color = 'var(--text-muted)';
   video.src = '';
   if (window._testHls) { window._testHls.destroy(); window._testHls = null; }
+  if (window._currentStreamId) { fetch(`/api/streams/${window._currentStreamId}/stop`, {method:'POST'}).catch(()=>{}); }
+  window._currentStreamId = id;
 
   modal.classList.add('open');
+
+  // Pre-warm the stream immediately
+  fetch(`/api/streams/${id}/warm`, { method: 'POST' }).catch(() => {});
 
   const proxyUrl = `/api/streams/${id}/preview.m3u8`;
 
   if (Hls.isSupported()) {
     const hls = new Hls({
-      enableWorker: false,
-      maxBufferLength: 10,
-      manifestLoadingTimeOut: 15000,
-      liveSyncDurationCount: 3,
-      liveMaxLatencyDurationCount: 6,
+      enableWorker: true,
+      maxBufferLength: 30,           // 30s buffer
+      maxMaxBufferLength: 60,        // Allow up to 60s
+      maxBufferSize: 60 * 1000 * 1000,
+      maxBufferHole: 2,
+      liveSyncDurationCount: 4,      // Stay 4 segments behind live
+      liveMaxLatencyDurationCount: 8,
       liveDurationInfinity: true,
-      startPosition: -1,  // start from live edge
+      startPosition: -1,             // Start at live edge
+      manifestLoadingTimeOut: 20000,
+      manifestLoadingMaxRetry: 5,
+      levelLoadingTimeOut: 20000,
+      fragLoadingTimeOut: 20000,
+      fragLoadingMaxRetry: 6,        // Retry failed segments aggressively
+      xhrSetup: xhr => { xhr.timeout = 20000; },
     });
     window._testHls = hls;
     hls.loadSource(proxyUrl);
     hls.attachMedia(video);
-    hls.on(Hls.Events.MANIFEST_PARSED, () => {
-      video.play();
-    });
+    hls.on(Hls.Events.MANIFEST_PARSED, () => { video.play(); });
     hls.on(Hls.Events.ERROR, (e, d) => {
       if (d.fatal) {
-        if (d.type === Hls.ErrorTypes.NETWORK_ERROR && d.details === 'manifestLoadError') {
-          // Fetch the error message from the server
+        if (d.type === Hls.ErrorTypes.NETWORK_ERROR) {
+          // Try to recover
+          status.textContent = '⚠️ Network issue — recovering...';
+          status.style.color = 'orange';
+          hls.startLoad();
+        } else {
           fetch(proxyUrl).then(r => r.json()).then(j => {
-            status.textContent = `❌ ${j.error || 'Stream unavailable'}`;
+            status.textContent = `❌ ${j.error || d.details}`;
             status.style.color = 'var(--danger)';
           }).catch(() => {
-            status.textContent = `❌ Stream unavailable — check URL`;
+            status.textContent = `❌ ${d.details}`;
             status.style.color = 'var(--danger)';
           });
-        } else {
-          status.textContent = `❌ ${d.details}`;
-          status.style.color = 'var(--danger)';
         }
       }
     });
@@ -1088,11 +1100,15 @@ window.testStream = (id, name, url) => {
   }
 
   video.onplaying = () => {
-    status.textContent = '✅ Playing (proxied via FFmpeg)';
+    status.textContent = '✅ Playing';
     status.style.color = 'var(--success)';
   };
+  video.onwaiting = () => {
+    status.textContent = '⏳ Buffering...';
+    status.style.color = 'orange';
+  };
   video.onerror = () => {
-    status.textContent = '❌ Stream error — check URL or network';
+    status.textContent = '❌ Stream error — check URL';
     status.style.color = 'var(--danger)';
   };
 };
@@ -1104,6 +1120,10 @@ window.closeStreamTest = () => {
   video.pause();
   video.src = '';
   if (window._testHls) { window._testHls.destroy(); window._testHls = null; }
+  if (window._currentStreamId) {
+    fetch(`/api/streams/${window._currentStreamId}/stop`, { method: 'POST' }).catch(() => {});
+    window._currentStreamId = null;
+  }
 };
 
 window.editStream = async (id) => {
