@@ -2059,17 +2059,60 @@ app.put('/api/channels/:id/timeblocks', (req, res) => {
 // ── yt-dlp URL resolver ───────────────────────────────────────────────────────
 async function resolveStreamUrl(url) {
   if (!url) return url;
-  const isWebPage = url && !url.match(/\.(m3u8|m3u|ts|mp4|mkv|flv)(\?|$)/i) &&
-    !url.includes(':5004') &&
-    url.match(/^https?:\/\//);
-  if (!isWebPage) return url;
-  try {
-    const resolved = execSync(
-      `/usr/local/bin/yt-dlp -g --no-playlist -f "best[ext=mp4]/best" "${url}" 2>/dev/null`,
-      { timeout: 15000 }
-    ).toString().trim().split('\n')[0];
-    if (resolved && resolved.startsWith('http')) return resolved;
-  } catch(_) {}
+
+  // ── Stirr ──────────────────────────────────────────────────────────────────
+  // Stirr channel page → extract station slug → hit their API
+  const stirrMatch = url.match(/stirr\.com\/watch\/(\d+)\//);
+  if (stirrMatch) {
+    try {
+      const channelId = stirrMatch[1];
+      // Stirr uses Amagi CDN — channel list is available via their API
+      const apiUrl = `https://api.stirr.com/api/v1/channels?station=national`;
+      const resp = await fetch(apiUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      const data = await resp.json();
+      const ch = (data.channels || data || []).find(c =>
+        String(c.id) === channelId || String(c.channelId) === channelId
+      );
+      if (ch && (ch.streamUrl || ch.hlsUrl || ch.url)) {
+        return ch.streamUrl || ch.hlsUrl || ch.url;
+      }
+      // Fallback: try direct Amagi URL pattern
+      const slugResp = await fetch(`https://api.stirr.com/api/v1/channels/${channelId}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' }
+      });
+      const slugData = await slugResp.json();
+      if (slugData.streamUrl || slugData.hlsUrl) return slugData.streamUrl || slugData.hlsUrl;
+    } catch(e) { console.log('[resolver] Stirr API failed:', e.message); }
+  }
+
+  // ── Pluto TV ───────────────────────────────────────────────────────────────
+  const plutoMatch = url.match(/pluto\.tv.*\/live-tv\/([^/?]+)/);
+  if (plutoMatch) {
+    try {
+      const slug = plutoMatch[1];
+      const r = await fetch(`https://api.pluto.tv/v2/channels?appName=web&appVersion=na&clientID=na&clientModelNumber=na&serverSideAds=false&channelSlug=${slug}&deviceMake=web&deviceModel=web&deviceType=web&deviceVersion=na`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' }
+      });
+      const d = await r.json();
+      const ch = (d.channels || [])[0];
+      const streamUrl = ch?.stitched?.urls?.[0]?.url || ch?.streams?.[0]?.url;
+      if (streamUrl) return streamUrl;
+    } catch(e) { console.log('[resolver] Pluto API failed:', e.message); }
+  }
+
+  // ── Generic: try yt-dlp for YouTube and other supported sites ─────────────
+  const isWebPage = !url.match(/\.(m3u8|m3u|ts|mp4|mkv|flv)(\?|$)/i) &&
+    !url.includes(':5004') && url.match(/^https?:\/\//);
+  if (isWebPage) {
+    try {
+      const resolved = execSync(
+        `/usr/local/bin/yt-dlp -g --no-playlist -f "best[ext=mp4]/best" "${url}" 2>/dev/null`,
+        { timeout: 15000 }
+      ).toString().trim().split('\n')[0];
+      if (resolved && resolved.startsWith('http')) return resolved;
+    } catch(_) {}
+  }
+
   return url;
 }
 
@@ -2101,26 +2144,13 @@ app.get('/api/streams/:id/preview.m3u8', async (req, res) => {
   // Clean old segments
   try { fs.readdirSync(hlsDir).forEach(f => { try { fs.unlinkSync(path.join(hlsDir,f)); } catch(_){} }); } catch(_) {}
 
-  // Resolve web-based stream URLs (YouTube, Stirr, Pluto, etc.) via yt-dlp
-  let resolvedUrl = stream.url;
-  const isWebUrl = stream.url && !stream.url.match(/\.(m3u8|m3u|ts|mp4|mkv|flv)(\?|$)/i) &&
-    !stream.url.includes(':5004') && // HDHomeRun
-    stream.url.match(/^https?:\/\//);
-
-  if (isWebUrl) {
-    try {
-      const ytdlpPath = '/usr/local/bin/yt-dlp';
-      const resolved = execSync(
-        `"${ytdlpPath}" -g --no-playlist -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" "${stream.url}" 2>/dev/null`,
-        { timeout: 15000 }
-      ).toString().trim().split('\n')[0];
-      if (resolved && resolved.startsWith('http')) {
-        resolvedUrl = resolved;
-        console.log(`[preview] yt-dlp resolved: ${stream.url.slice(0,50)} → ${resolvedUrl.slice(0,60)}`);
-      }
-    } catch(e) {
-      console.log(`[preview] yt-dlp failed, trying direct: ${e.message.slice(0,100)}`);
-    }
+  // Resolve web-based stream URLs via yt-dlp / service APIs
+  let resolvedUrl;
+  try {
+    resolvedUrl = await resolveStreamUrl(stream.url);
+    if (resolvedUrl !== stream.url) console.log(`[preview] resolved: ${stream.url.slice(0,50)} → ${resolvedUrl.slice(0,60)}`);
+  } catch(e) {
+    resolvedUrl = stream.url;
   }
 
   // Build FFmpeg args — maximally compatible input options
