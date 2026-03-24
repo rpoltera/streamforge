@@ -97,6 +97,8 @@ let config = {
   baseUrl: 'http://localhost:8080',
   dataDir: DATA_DIR,
   epgDaysAhead: 7,
+  xcUser: 'streamforge',
+  xcPass: 'streamforge',
 
   // FFmpeg paths
   ffmpegPath:  '/usr/bin/ffmpeg',
@@ -870,6 +872,7 @@ app.put('/api/config', (req, res) => {
     'logoUrl',
     'sdUsername','sdPassword','sdLineupId','sdAutoUpdate',
     'lsApiKey',
+    'xcUser','xcPass',
   ].forEach(k => {
     if (req.body[k] !== undefined) config[k] = req.body[k];
   });
@@ -2396,6 +2399,123 @@ app.post('/api/sd/programs', async (req, res) => {
     });
     res.json(await r.json());
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Xtream Codes API ──────────────────────────────────────────────────────────
+// Allows TiviMate, IPTV Smarters, OTT Navigator etc. to connect via Xtream
+// Server URL: http://YOUR-IP:8080
+// Username: streamforge
+// Password: streamforge
+function xcAuth(req) {
+  const u = req.query.username || req.body?.username;
+  const p = req.query.password || req.body?.password;
+  const xcUser = config.xcUser || 'streamforge';
+  const xcPass = config.xcPass || 'streamforge';
+  return u === xcUser && p === xcPass;
+}
+
+function xcUserInfo() {
+  const xcUser = config.xcUser || 'streamforge';
+  const xcPass = config.xcPass || 'streamforge';
+  return {
+    user_info: {
+      username: xcUser, password: xcPass,
+      message: 'StreamForge IPTV',
+      auth: 1, status: 'Active',
+      exp_date: null, is_trial: '0', active_cons: '1',
+      created_at: '1700000000', max_connections: '100',
+      allowed_output_formats: ['m3u8', 'ts'],
+    },
+    server_info: {
+      url: config.baseUrl.replace(/https?:\/\//, '').split(':')[0],
+      port: String(config.port || 8080),
+      https_port: '',
+      server_protocol: 'http',
+      rtmp_port: '',
+      timezone: 'America/Los_Angeles',
+      timestamp_now: Math.floor(Date.now() / 1000),
+      time_now: new Date().toISOString(),
+    },
+  };
+}
+
+// Auth / user info
+app.all('/player_api.php', (req, res) => {
+  if (!xcAuth(req)) return res.json({ user_info: { auth: 0 } });
+  const action = req.query.action || req.body?.action;
+
+  if (!action) return res.json(xcUserInfo());
+
+  if (action === 'get_live_categories') {
+    const groups = [...new Set(db.channels.map(c => c.group || 'General').filter(Boolean))];
+    return res.json(groups.map((g, i) => ({
+      category_id: String(i + 1), category_name: g, parent_id: 0,
+    })));
+  }
+
+  if (action === 'get_live_streams') {
+    const groups = [...new Set(db.channels.map(c => c.group || 'General'))];
+    return res.json(db.channels.filter(c => c.active !== false).map(ch => ({
+      num: ch.num,
+      name: ch.name,
+      stream_type: 'live',
+      stream_id: ch.num,
+      stream_icon: ch.logo || '',
+      epg_channel_id: ch.epgChannelId || ch.id,
+      added: Math.floor(Date.now() / 1000),
+      category_id: String(groups.indexOf(ch.group || 'General') + 1),
+      custom_sid: '',
+      tv_archive: 0, tv_archive_duration: 0,
+    })));
+  }
+
+  if (action === 'get_epg') {
+    const streamId = parseInt(req.query.stream_id);
+    const ch = db.channels.find(c => c.num === streamId);
+    if (!ch) return res.json({ epg_listings: [] });
+    const now = Date.now();
+    const programs = buildChannelSchedule(ch, now - 3600000, now + 86400000 * 3);
+    return res.json({
+      epg_listings: programs.map((p, i) => ({
+        id: String(i),
+        epg_id: ch.epgChannelId || ch.id,
+        title: Buffer.from(p.title || '').toString('base64'),
+        lang: 'en',
+        start: new Date(p.start).toISOString().replace('T', ' ').slice(0, 19),
+        end: new Date(p.end).toISOString().replace('T', ' ').slice(0, 19),
+        description: Buffer.from(p.description || '').toString('base64'),
+        channel_id: ch.epgChannelId || ch.id,
+        start_timestamp: Math.floor(p.start / 1000),
+        stop_timestamp: Math.floor(p.end / 1000),
+      })),
+    });
+  }
+
+  return res.json(xcUserInfo());
+});
+
+// Stream delivery — /live/user/pass/streamId.ts or .m3u8
+app.get('/live/:user/:pass/:streamId', (req, res) => {
+  const xcUser = config.xcUser || 'streamforge';
+  const xcPass = config.xcPass || 'streamforge';
+  if (req.params.user !== xcUser || req.params.pass !== xcPass) {
+    return res.status(401).send('Unauthorized');
+  }
+  const streamNum = parseInt(req.params.streamId);
+  const ch = db.channels.find(c => c.num === streamNum);
+  if (!ch) return res.status(404).send('Channel not found');
+  // Redirect to the actual HLS stream
+  res.redirect(`/stream/${ch.id}`);
+});
+
+// get.php compatibility
+app.get('/get.php', (req, res) => {
+  if (!xcAuth(req)) return res.status(401).send('Unauthorized');
+  const type = req.query.type;
+  if (type === 'm3u' || type === 'm3u_plus') {
+    return res.redirect('/iptv.m3u');
+  }
+  res.redirect('/iptv.m3u');
 });
 
 // ── SPA fallback ──────────────────────────────────────────────────────────────
