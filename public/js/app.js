@@ -962,6 +962,47 @@ function populateStreamPicker() {
     streams.map(s => `<option value="${s.id}">${esc(s.name)}${s.group ? ` (${esc(s.group)})` : ''}</option>`).join('');
 }
 
+document.getElementById('btn-resolve-url')?.addEventListener('click', () => {
+  const card = document.getElementById('url-resolver-card');
+  card.style.display = card.style.display === 'none' ? '' : 'none';
+});
+
+document.getElementById('btn-do-resolve')?.addEventListener('click', async () => {
+  const url = document.getElementById('resolver-input').value.trim();
+  const resultEl = document.getElementById('resolver-result');
+  const errorEl = document.getElementById('resolver-error');
+  const outputEl = document.getElementById('resolver-output');
+  if (!url) return;
+  resultEl.style.display = 'none';
+  errorEl.style.display = 'none';
+  const btn = document.getElementById('btn-do-resolve');
+  btn.textContent = 'Extracting...'; btn.disabled = true;
+  try {
+    const r = await fetch('/api/streams/resolve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    const d = await r.json();
+    if (!r.ok) { errorEl.textContent = d.error; errorEl.style.display = ''; return; }
+    outputEl.value = d.url;
+    resultEl.style.display = '';
+  } catch(e) {
+    errorEl.textContent = 'Failed: ' + e.message;
+    errorEl.style.display = '';
+  } finally {
+    btn.textContent = 'Extract'; btn.disabled = false;
+  }
+});
+
+document.getElementById('btn-resolver-add')?.addEventListener('click', () => {
+  const url = document.getElementById('resolver-output').value;
+  if (!url) return;
+  document.getElementById('stream-url').value = url;
+  document.getElementById('url-resolver-card').style.display = 'none';
+  openModal('modal-stream');
+});
+
 document.getElementById('btn-add-stream')?.addEventListener('click', () => {
   editingStreamId = null;
   document.getElementById('stream-modal-title').textContent = 'Add Stream';
@@ -1685,6 +1726,28 @@ document.getElementById('lic-settings-activate')?.addEventListener('click', asyn
     const ribbon = document.getElementById('sf-trial-ribbon');
     if (ribbon) ribbon.remove();
   } catch(e) { errEl.textContent = 'Failed: ' + e.message; errEl.style.display = ''; }
+});
+
+document.getElementById('btn-reset-channels')?.addEventListener('click', async () => {
+  if (!confirm('Delete ALL channels and their playout queues? EPG and live streams will be kept.')) return;
+  await API.post('/api/reset/channels', {});
+  notify('✅ All channels cleared');
+  loadChannels();
+});
+
+document.getElementById('btn-reset-playout')?.addEventListener('click', async () => {
+  if (!confirm('Clear playout queues on all channels? Channels themselves will be kept.')) return;
+  await API.post('/api/reset/playout', {});
+  notify('✅ All playout queues cleared');
+  loadChannels();
+});
+
+document.getElementById('btn-factory-reset')?.addEventListener('click', async () => {
+  if (!confirm('⚠️ FACTORY RESET: This will delete ALL channels, libraries, media and EPG. Live streams are kept. This cannot be undone.')) return;
+  if (!confirm('Last chance — are you absolutely sure?')) return;
+  await API.post('/api/reset/factory', {});
+  notify('✅ Factory reset complete');
+  setTimeout(() => location.reload(), 1500);
 });
 
 document.getElementById('btn-save-config').addEventListener('click',async()=>{
