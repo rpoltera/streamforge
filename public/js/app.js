@@ -994,35 +994,28 @@ window.testStream = (id, name, url) => {
   status.textContent = 'Connecting...';
   status.style.color = 'var(--text-muted)';
   video.src = '';
+  if (window._testHls) { window._testHls.destroy(); window._testHls = null; }
 
   modal.classList.add('open');
 
-  // Use server proxy to handle audio transcoding (AC3/EAC3 → AAC)
-  const proxyUrl = `/api/streams/${id}/preview`;
-
   if (Hls.isSupported()) {
-    if (window._testHls) { window._testHls.destroy(); }
-    const hls = new Hls({ enableWorker: false });
+    const hls = new Hls({ enableWorker: false, maxBufferLength: 10 });
     window._testHls = hls;
-    hls.loadSource(proxyUrl);
+    hls.loadSource(url);
     hls.attachMedia(video);
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
       video.play();
-      status.textContent = '✅ Playing (audio transcoded to AAC)';
+      status.textContent = '✅ Playing';
       status.style.color = 'var(--success)';
     });
     hls.on(Hls.Events.ERROR, (e, d) => {
       if (d.fatal) {
-        // Fall back to native
-        video.src = proxyUrl;
-        video.play().catch(() => {
-          status.textContent = `❌ Error: ${d.details}`;
-          status.style.color = 'var(--danger)';
-        });
+        status.textContent = `❌ ${d.type}: ${d.details}`;
+        status.style.color = 'var(--danger)';
       }
     });
-  } else {
-    video.src = proxyUrl;
+  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    video.src = url;
     video.play().then(() => {
       status.textContent = '✅ Playing';
       status.style.color = 'var(--success)';
@@ -1030,13 +1023,15 @@ window.testStream = (id, name, url) => {
       status.textContent = `❌ ${e.message}`;
       status.style.color = 'var(--danger)';
     });
+  } else {
+    status.textContent = '❌ HLS not supported in this browser';
+    status.style.color = 'var(--danger)';
   }
 
   video.onplaying = () => {
-    status.textContent = '✅ Playing (audio transcoded to AAC)';
+    status.textContent = '✅ Playing';
     status.style.color = 'var(--success)';
   };
-
   video.onerror = () => {
     status.textContent = '❌ Stream error — check URL or network';
     status.style.color = 'var(--danger)';
