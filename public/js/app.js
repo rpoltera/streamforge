@@ -1547,13 +1547,19 @@ document.getElementById('btn-today').addEventListener('click',()=>{document.getE
 
 // ── Output ────────────────────────────────────────────────────────────────────
 async function loadOutput(){
-  try{const cfg=await API.get('/api/config');setOutputUrls(cfg.baseUrl||window.location.origin)}
-  catch{setOutputUrls(window.location.origin)}
+  try{const cfg=await API.get('/api/config');setOutputUrls(cfg.baseUrl||window.location.origin, cfg)}
+  catch{setOutputUrls(window.location.origin, {})}
   loadXmltvPreview();
 }
-function setOutputUrls(base){
+function setOutputUrls(base, cfg){
   document.getElementById('out-m3u').value=base+'/iptv.m3u';
   document.getElementById('out-xmltv').value=base+'/xmltv.xml';
+  const xcUrl = document.getElementById('out-xc-url');
+  const xcUser = document.getElementById('out-xc-user');
+  const xcPass = document.getElementById('out-xc-pass');
+  if(xcUrl) xcUrl.value = base;
+  if(xcUser) xcUser.value = cfg.xcUser||'streamforge';
+  if(xcPass) xcPass.value = cfg.xcPass||'streamforge';
 }
 async function loadXmltvPreview(){
   try{const r=await fetch('/xmltv.xml');const t=await r.text();document.getElementById('xmltv-preview').textContent=t.slice(0,3000)+(t.length>3000?'\n...(truncated)':'')}
@@ -1635,6 +1641,10 @@ async function loadSettings(){
     document.getElementById('cfg-baseurl').value = cfg.baseUrl||'';
     const lsEl = document.getElementById('cfg-ls-api-key');
     if(lsEl) lsEl.value = cfg.lsApiKey||'';
+    const xcUserEl = document.getElementById('cfg-xc-user');
+    if(xcUserEl) xcUserEl.value = cfg.xcUser||'streamforge';
+    const xcPassEl = document.getElementById('cfg-xc-pass');
+    if(xcPassEl) xcPassEl.value = cfg.xcPass||'streamforge';
     applyLogoUrl('');
 
     // AI provider
@@ -1794,6 +1804,8 @@ document.getElementById('btn-save-config').addEventListener('click',async()=>{
       // General
       baseUrl:      document.getElementById('cfg-baseurl').value.trim(),
       lsApiKey:     (document.getElementById('cfg-ls-api-key')||{value:''}).value.trim(),
+      xcUser:       (document.getElementById('cfg-xc-user')||{value:'streamforge'}).value.trim()||'streamforge',
+      xcPass:       (document.getElementById('cfg-xc-pass')||{value:'streamforge'}).value.trim()||'streamforge',
       epgDaysAhead: parseInt(document.getElementById('cfg-days').value),
       // FFmpeg
       ffmpegPath:   document.getElementById('cfg-ffmpeg').value.trim(),
