@@ -2523,7 +2523,7 @@ app.get('*', (req, res) => res.sendFile(path.join(__dirname, '../public/index.ht
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 const PORT = parseInt(config.port) || 8080;
-app.listen(PORT, '127.0.0.1', () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`[streamforge] v2 running on port ${PORT}`);
   console.log(`[streamforge] ffmpeg: ${config.ffmpegPath}`);
   console.log(`[streamforge] data:   ${config.dataDir}`);
