@@ -266,6 +266,7 @@ try {
   }));
 } catch (_) { app.use(morgan('dev')); }
 app.use(express.static(path.join(__dirname, '../public')));
+app.use('/hls', express.static(path.join(config.dataDir, 'hls'), { maxAge: 0 }));
 
 // ── License routes ────────────────────────────────────────────────────────────
 app.get('/api/license', (req, res) => res.json(getLicenseStatus()));
@@ -2024,34 +2025,67 @@ app.put('/api/channels/:id/timeblocks', (req, res) => {
 app.get('/api/streams', (req, res) => res.json(db.streams));
 
 // Stream proxy — transcodes audio to AAC for browser compatibility
-app.get('/api/streams/:id/preview', (req, res) => {
+// Stream preview — proxies through FFmpeg as HLS for browser compatibility
+app.get('/api/streams/:id/preview.m3u8', async (req, res) => {
   const stream = db.streams.find(s => s.id === req.params.id);
   if (!stream) return res.status(404).send('Stream not found');
 
-  res.setHeader('Content-Type', 'video/mp2t');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Transfer-Encoding', 'chunked');
+  const hlsDir = path.join(config.dataDir, 'hls', `preview_${req.params.id}`);
+  fs.mkdirSync(hlsDir, { recursive: true });
 
+  // Kill any existing preview process
+  if (!global._previewProcs) global._previewProcs = {};
+  if (global._previewProcs[req.params.id]) {
+    try { global._previewProcs[req.params.id].kill('SIGKILL'); } catch(_) {}
+    delete global._previewProcs[req.params.id];
+  }
+
+  // Clean old segments
+  try { fs.readdirSync(hlsDir).forEach(f => { try { fs.unlinkSync(path.join(hlsDir,f)); } catch(_){} }); } catch(_) {}
+
+  const m3u8Path = path.join(hlsDir, 'index.m3u8');
   const args = [
-    '-re',
-    '-user_agent', 'StreamForge/2.0 FFmpeg',
+    '-y',
+    '-user_agent', 'Mozilla/5.0 StreamForge/2.0',
     '-i', stream.url,
-    '-map', '0:v:0?',
-    '-map', '0:a:0?',
+    '-map', '0:v:0?', '-map', '0:a:0?',
     '-vcodec', 'copy',
-    '-acodec', 'aac',
-    '-ab', '192k',
-    '-ar', '48000',
-    '-ac', '2',
-    '-f', 'mpegts',
-    '-'
+    '-acodec', 'aac', '-ab', '192k', '-ar', '48000', '-ac', '2',
+    '-f', 'hls',
+    '-hls_time', '2',
+    '-hls_list_size', '6',
+    '-hls_flags', 'delete_segments+append_list',
+    '-hls_segment_filename', path.join(hlsDir, 'seg%03d.ts'),
+    m3u8Path,
   ];
 
-  const ff = spawn(config.ffmpegPath, args, { stdio: ['ignore','pipe','pipe'] });
-  ff.stdout.pipe(res);
-  ff.stderr.on('data', d => console.log('[stream-preview]', d.toString().slice(0,100)));
-  req.on('close', () => ff.kill('SIGKILL'));
-  ff.on('exit', () => res.end());
+  const ff = spawn(config.ffmpegPath, args, { stdio: ['ignore','ignore','pipe'] });
+  global._previewProcs[req.params.id] = ff;
+  ff.stderr.on('data', d => { /* suppress */ });
+
+  // Wait up to 12s for m3u8
+  let waited = 0;
+  while (waited < 12000) {
+    await new Promise(r => setTimeout(r, 300));
+    waited += 300;
+    if (fs.existsSync(m3u8Path) && fs.statSync(m3u8Path).size > 0) break;
+  }
+
+  if (!fs.existsSync(m3u8Path) || fs.statSync(m3u8Path).size === 0) {
+    try { ff.kill('SIGKILL'); } catch(_) {}
+    return res.status(502).json({ error: 'Stream failed to start — check URL' });
+  }
+
+  // Rewrite m3u8 to use absolute URLs for segments
+  let content = fs.readFileSync(m3u8Path, 'utf8');
+  content = content.replace(/seg(\d+)\.ts/g, `/hls/preview_${req.params.id}/seg$1.ts`);
+  res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.send(content);
+});
+
+app.get('/api/streams/:id/preview', (req, res) => {
+  res.redirect(`/api/streams/${req.params.id}/preview.m3u8`);
 });
 
 app.post('/api/streams', (req, res) => {
