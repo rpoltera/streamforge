@@ -2072,6 +2072,7 @@ app.get('/api/streams/:id/preview.m3u8', async (req, res) => {
     '-map', '0:v:0?', '-map', '0:a:0?',
     '-vcodec', 'copy',
     '-acodec', 'aac', '-ab', '192k', '-ar', '48000', '-ac', '2',
+    '-af', 'aresample=async=1:first_pts=0',
     '-f', 'hls',
     '-hls_time', '2',
     '-hls_list_size', '6',
@@ -2084,12 +2085,16 @@ app.get('/api/streams/:id/preview.m3u8', async (req, res) => {
   global._previewProcs[req.params.id] = ff;
   ff.stderr.on('data', d => { /* suppress */ });
 
-  // Wait up to 12s for m3u8
+  // Wait for at least 3 segments before serving (ensures audio transcode is stable)
   let waited = 0;
+  let segCount = 0;
   while (waited < 12000) {
     await new Promise(r => setTimeout(r, 300));
     waited += 300;
-    if (fs.existsSync(m3u8Path) && fs.statSync(m3u8Path).size > 0) break;
+    if (fs.existsSync(m3u8Path) && fs.statSync(m3u8Path).size > 0) {
+      segCount = fs.readdirSync(hlsDir).filter(f => f.endsWith('.ts')).length;
+      if (segCount >= 3) break;
+    }
   }
 
   if (!fs.existsSync(m3u8Path) || fs.statSync(m3u8Path).size === 0) {
