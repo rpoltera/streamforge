@@ -2350,45 +2350,104 @@ document.getElementById('btn-ai-build-all').addEventListener('click', async () =
 
   let channels = [];
   try { channels = await API.get('/api/channels'); } catch(e) { notify('Failed to load channels', true); return; }
-  if (!channels.length) { notify('No channels found', true); return; }
 
   const epg = await API.get('/api/epg');
   const epgChannels = epg.channels || [];
+  if (!epgChannels.length) { notify('No EPG imported yet — go to EPG Import first.', true); return; }
 
-  // Fuzzy match: normalize and find best EPG channel for each SF channel
   function norm(s){ return (s||'').toLowerCase().replace(/[^a-z0-9]/g,''); }
   function bestEpgMatch(chName) {
     const n = norm(chName);
-    // Exact match
     let match = epgChannels.find(e => norm(e.name) === n);
     if (match) return match.id;
-    // Contains match
     match = epgChannels.find(e => norm(e.name).includes(n) || n.includes(norm(e.name)));
     if (match) return match.id;
     return null;
   }
 
-  // Pair each channel with its best EPG match
-  const pairs = channels.map(ch => ({
-    ch,
-    epgId: ch.epgChannelId || bestEpgMatch(ch.name),
-  })).filter(p => p.epgId);
+  // Find EPG channels that don't already have a StreamForge channel
+  const existingEpgIds = new Set(channels.map(ch => ch.epgChannelId).filter(Boolean));
+  const existingNames = new Set(channels.map(ch => norm(ch.name)));
 
-  if (!pairs.length) {
-    notify('No channels could be matched to EPG channels by name. Make sure channel names match EPG channel names.', true);
+  const missingEpgChannels = epgChannels.filter(epgCh => {
+    if (existingEpgIds.has(epgCh.id)) return false;
+    if (existingNames.has(norm(epgCh.name))) return false;
+    return true;
+  });
+
+  // Existing non-live channels that have an EPG match
+  const existingPairs = channels
+    .filter(ch => !ch.liveStreamId)
+    .map(ch => ({ ch, epgId: ch.epgChannelId || bestEpgMatch(ch.name) }))
+    .filter(p => p.epgId);
+
+  const liveCount = channels.filter(ch => ch.liveStreamId).length;
+  const totalToBuild = existingPairs.length + missingEpgChannels.length;
+
+  if (!totalToBuild) {
+    notify('All EPG channels already have StreamForge channels built.', true);
     return;
   }
 
-  if (!confirm(`Build AI schedules for ${pairs.length} of ${channels.length} channel(s)? This may take several minutes.`)) return;
+  const msg = [
+    `Build AI schedules for ${totalToBuild} channel(s)?`,
+    missingEpgChannels.length ? `• ${missingEpgChannels.length} new channels will be created from EPG` : '',
+    existingPairs.length ? `• ${existingPairs.length} existing channels will be updated` : '',
+    liveCount ? `• ${liveCount} live stream channels will be skipped` : '',
+    `\nThis may take several minutes.`
+  ].filter(Boolean).join('\n');
+
+  if (!confirm(msg)) return;
+
+  // Ask for batch size to avoid API rate limits
+  const batchInput = prompt(`How many channels to build per run?\n(Recommended: 50 for Anthropic, 25 for OpenAI)\nYou can run again to continue where it left off.`, '50');
+  const batchSize = parseInt(batchInput) || 50;
 
   btn.disabled = true;
   progressEl.style.display = '';
   let done = 0;
+  let created = 0;
   const errors = [];
+  const total = totalToBuild;
 
-  for (const { ch, epgId } of pairs) {
-    statusEl.textContent = `Building "${ch.name}"... (${done+1}/${pairs.length})`;
-    barEl.style.width = `${Math.round((done/pairs.length)*100)}%`;
+  // Step 1: Create missing channels from EPG
+  if (missingEpgChannels.length) {
+    statusEl.textContent = `Creating ${missingEpgChannels.length} new channels from EPG...`;
+    const existing = await API.get('/api/channels');
+    let nextNum = (existing.reduce((max, c) => Math.max(max, c.num||0), 0)) + 1;
+
+    for (const epgCh of missingEpgChannels) {
+      try {
+        await API.post('/api/channels', {
+          name: epgCh.name,
+          num: nextNum++,
+          group: epgCh.group || '',
+          logo: epgCh.icon || '',
+          epgChannelId: epgCh.id,
+          active: true,
+        });
+        created++;
+      } catch(e) { errors.push(`Create ${epgCh.name}: ${e.message}`); }
+    }
+  }
+
+  // Step 2: Reload channels after creation
+  channels = await API.get('/api/channels');
+  const allPairs = channels
+    .filter(ch => !ch.liveStreamId)
+    .map(ch => ({ ch, epgId: ch.epgChannelId || bestEpgMatch(ch.name) }))
+    .filter(p => p.epgId);
+
+  // Step 3: Build AI schedules — only empty channels, in batches
+  const emptyPairs = allPairs.filter(p => !p.ch.playout || p.ch.playout.length === 0);
+  const batchPairs = emptyPairs.slice(0, batchSize);
+  const remaining = emptyPairs.length - batchPairs.length;
+
+  statusEl.textContent = `Building ${batchPairs.length} channels (${remaining} remaining after this batch)...`;
+
+  for (const { ch, epgId } of batchPairs) {
+    statusEl.textContent = `Building "${ch.name}"... (${done+1}/${batchPairs.length})`;
+    barEl.style.width = `${Math.round((done/batchPairs.length)*100)}%`;
 
     try {
       const r = await API.post('/api/ai/build-schedule', {
@@ -2416,10 +2475,12 @@ document.getElementById('btn-ai-build-all').addEventListener('click', async () =
   }
 
   barEl.style.width = '100%';
-  statusEl.textContent = `Done! Built ${done} channels${errors.length ? ` (${errors.length} errors)` : ''}.`;
+  const remainingMsg = remaining > 0 ? ` — ${remaining} channels still need schedules, click Build All again to continue` : '';
+  statusEl.textContent = `Done! Created ${created} channels, built ${done} schedules${errors.length ? ` (${errors.length} errors)` : ''}${remainingMsg}.`;
   btn.disabled = false;
-  notify(`✅ Built schedules for ${done - errors.length}/${done} channels`);
-  if (errors.length) console.error('AI bulk build errors:', errors);
+  notify(`✅ Built ${done} schedules${remaining > 0 ? ` — ${remaining} remaining, run again to continue` : ' — all done!'}`);
+  loadChannels();
+  if (errors.length) console.error('Build All errors:', errors);
 });
 
 document.getElementById('btn-ai-build').addEventListener('click', async () => {
